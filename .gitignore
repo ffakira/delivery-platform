@@ -1,0 +1,24 @@
+# .NET build output
+**/bin/
+**/obj/
+
+# IDE
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+secrets.json
+
+# Test and coverage output
+**/TestResults/
+**/coverage/
+
+# OS
+.DS_Store
+Thumbs.db
