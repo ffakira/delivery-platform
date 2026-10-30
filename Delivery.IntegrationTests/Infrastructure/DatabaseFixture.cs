@@ -15,7 +15,7 @@ public sealed class DatabaseFixture : IAsyncLifetime
             .WithPassword("delivery_test_password")
             .Build();
 
-    private DeliveryApiFactory _factory = null!;
+    private DeliveryApiFactory? _factory;
 
     public HttpClient Client { get; private set; } = null!;
 
@@ -43,9 +43,13 @@ public sealed class DatabaseFixture : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        Client.Dispose();
+        Client?.Dispose();
 
-        await _factory.DisposeAsync();
+        if (_factory is not null)
+        {
+            await _factory.DisposeAsync();
+        }
+
         await _postgres.DisposeAsync();
     }
 }
