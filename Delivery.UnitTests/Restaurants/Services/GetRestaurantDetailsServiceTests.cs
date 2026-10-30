@@ -1,4 +1,3 @@
-
 using Delivery.Application.Restaurants.Queries;
 using Delivery.Application.Restaurants.Services;
 using Delivery.Domain.Restaurants.Entities;

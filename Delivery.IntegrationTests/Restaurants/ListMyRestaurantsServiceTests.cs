@@ -1,14 +1,10 @@
-
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
-using Delivery.Domain.Restaurants.Entities;
 using Delivery.Domain.Restaurants.Enums;
-using Delivery.Infrastructure.Identity;
 using Delivery.Infrastructure.Persistence;
 using Delivery.IntegrationTests.Infrastructure;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -17,8 +13,6 @@ namespace Delivery.IntegrationTests.Restaurants;
 [Collection(DatabaseCollection.Name)]
 public sealed class ListMyRestaurantsTests(DatabaseFixture fixture)
 {
-    private const string Password = "StrongPassword123!";
-
     [Fact]
     public async Task ListMyRestaurants_WithoutAuthentication_ReturnsUnauthorized()
     {
@@ -34,10 +28,9 @@ public sealed class ListMyRestaurantsTests(DatabaseFixture fixture)
     [Fact]
     public async Task ListMyRestaurants_WithNoMemberships_ReturnsEmptyCollection()
     {
-        using var authenticatedClient =
-            await CreateAuthenticatedClientAsync();
+        using var user = await fixture.CreateAuthenticatedClientAsync();
 
-        using var response = await authenticatedClient.Client.GetAsync(
+        using var response = await user.Client.GetAsync(
             "/api/restaurants/");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -52,9 +45,9 @@ public sealed class ListMyRestaurantsTests(DatabaseFixture fixture)
     [Fact]
     public async Task ListMyRestaurants_WithMultipleMemberships_ReturnsOnlyActiveRestaurantsForCurrentUser()
     {
-        using var owner = await CreateAuthenticatedClientAsync();
-        using var member = await CreateAuthenticatedClientAsync();
-        using var outsider = await CreateAuthenticatedClientAsync();
+        using var owner = await fixture.CreateAuthenticatedClientAsync();
+        using var member = await fixture.CreateAuthenticatedClientAsync();
+        using var outsider = await fixture.CreateAuthenticatedClientAsync();
 
         var firstRestaurantId = await CreateRestaurantAsync(
             owner.Client,
@@ -68,24 +61,21 @@ public sealed class ListMyRestaurantsTests(DatabaseFixture fixture)
             outsider.Client,
             "Third Restaurant");
 
-        var ownerUserId = await GetUserIdAsync(owner.Email);
-        var memberUserId = await GetUserIdAsync(member.Email);
-
         await AddMembershipAsync(
             secondRestaurantId,
-            ownerUserId,
+            owner.UserId,
             RestaurantRole.Manager,
             MembershipStatus.Active);
 
         await AddMembershipAsync(
             thirdRestaurantId,
-            ownerUserId,
+            owner.UserId,
             RestaurantRole.Staff,
             MembershipStatus.Suspended);
 
         await AddMembershipAsync(
             firstRestaurantId,
-            memberUserId,
+            member.UserId,
             RestaurantRole.Staff,
             MembershipStatus.Invited);
 
@@ -119,75 +109,11 @@ public sealed class ListMyRestaurantsTests(DatabaseFixture fixture)
         Assert.Equal(RestaurantRole.Manager, secondRestaurant.Role);
     }
 
-    private async Task<AuthenticatedClient> CreateAuthenticatedClientAsync()
-    {
-        var client = fixture.CreateClient();
-
-        try
-        {
-            var email = $"user-{Guid.NewGuid():N}@example.com";
-
-            var registrationToken = await GetCsrfTokenAsync(client);
-
-            using var registrationRequest = new HttpRequestMessage(
-                HttpMethod.Post,
-                "/api/auth/register")
-            {
-                Content = JsonContent.Create(new
-                {
-                    email,
-                    password = Password
-                })
-            };
-
-            registrationRequest.Headers.Add(
-                "X-CSRF-TOKEN",
-                registrationToken);
-
-            using var registrationResponse = await client.SendAsync(
-                registrationRequest);
-
-            Assert.Equal(
-                HttpStatusCode.Created,
-                registrationResponse.StatusCode);
-
-            var loginToken = await GetCsrfTokenAsync(client);
-
-            using var loginRequest = new HttpRequestMessage(
-                HttpMethod.Post,
-                "/api/auth/login")
-            {
-                Content = JsonContent.Create(new
-                {
-                    email,
-                    password = Password
-                })
-            };
-
-            loginRequest.Headers.Add(
-                "X-CSRF-TOKEN",
-                loginToken);
-
-            using var loginResponse = await client.SendAsync(loginRequest);
-
-            Assert.Equal(
-                HttpStatusCode.NoContent,
-                loginResponse.StatusCode);
-
-            return new AuthenticatedClient(client, email);
-        }
-        catch
-        {
-            client.Dispose();
-            throw;
-        }
-    }
-
     private async Task<Guid> CreateRestaurantAsync(
         HttpClient client,
         string name)
     {
-        var csrfToken = await GetCsrfTokenAsync(client);
+        var csrfToken = await client.GetCsrfTokenAsync();
 
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
@@ -228,20 +154,6 @@ public sealed class ListMyRestaurantsTests(DatabaseFixture fixture)
         return result.Id;
     }
 
-    private async Task<Guid> GetUserIdAsync(string email)
-    {
-        await using var scope = fixture.Services.CreateAsyncScope();
-
-        var userManager = scope.ServiceProvider
-            .GetRequiredService<UserManager<ApplicationUser>>();
-
-        var user = await userManager.FindByEmailAsync(email);
-
-        Assert.NotNull(user);
-
-        return user.Id;
-    }
-
     private async Task AddMembershipAsync(
         Guid restaurantId,
         Guid userId,
@@ -275,21 +187,6 @@ public sealed class ListMyRestaurantsTests(DatabaseFixture fixture)
         await dbContext.SaveChangesAsync();
     }
 
-    private static async Task<string> GetCsrfTokenAsync(HttpClient client)
-    {
-        using var response = await client.GetAsync(
-            "/api/auth/csrf-token");
-
-        response.EnsureSuccessStatusCode();
-
-        using var document = JsonDocument.Parse(
-            await response.Content.ReadAsStringAsync());
-
-        return document.RootElement
-            .GetProperty("requestToken")
-            .GetString()!;
-    }
-
     private static string CreateValidCnpj()
     {
         var baseNumber =
@@ -316,20 +213,6 @@ public sealed class ListMyRestaurantsTests(DatabaseFixture fixture)
         var remainder = sum % 11;
 
         return remainder < 2 ? 0 : 11 - remainder;
-    }
-
-    private sealed class AuthenticatedClient(
-        HttpClient client,
-        string email) : IDisposable
-    {
-        public HttpClient Client { get; } = client;
-
-        public string Email { get; } = email;
-
-        public void Dispose()
-        {
-            Client.Dispose();
-        }
     }
 
     private sealed record CreateRestaurantResponse(Guid Id);

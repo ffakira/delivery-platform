@@ -1,4 +1,3 @@
-
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -15,8 +14,6 @@ namespace Delivery.IntegrationTests.Restaurants;
 [Collection(DatabaseCollection.Name)]
 public sealed class CreateRestaurantTests(DatabaseFixture fixture)
 {
-    private const string Password = "StrongPassword123!";
-
     [Fact]
     public async Task CreateRestaurant_WithoutAuthentication_ReturnsUnauthorized()
     {
@@ -34,9 +31,9 @@ public sealed class CreateRestaurantTests(DatabaseFixture fixture)
     [Fact]
     public async Task CreateRestaurant_WithoutAntiforgeryToken_ReturnsBadRequest()
     {
-        using var client = await CreateAuthenticatedClientAsync();
+        using var user = await fixture.CreateAuthenticatedClientAsync();
 
-        using var response = await client.PostAsJsonAsync(
+        using var response = await user.Client.PostAsJsonAsync(
             "/api/restaurants/",
             CreateRequest());
 
@@ -48,9 +45,9 @@ public sealed class CreateRestaurantTests(DatabaseFixture fixture)
     [Fact]
     public async Task CreateRestaurant_WithInvalidCnpj_ReturnsBadRequest()
     {
-        using var client = await CreateAuthenticatedClientAsync();
+        using var user = await fixture.CreateAuthenticatedClientAsync();
 
-        var csrfToken = await GetCsrfTokenAsync(client);
+        var csrfToken = await user.Client.GetCsrfTokenAsync();
 
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
@@ -62,7 +59,7 @@ public sealed class CreateRestaurantTests(DatabaseFixture fixture)
 
         request.Headers.Add("X-CSRF-TOKEN", csrfToken);
 
-        using var response = await client.SendAsync(request);
+        using var response = await user.Client.SendAsync(request);
 
         Assert.Equal(
             HttpStatusCode.BadRequest,
@@ -72,9 +69,9 @@ public sealed class CreateRestaurantTests(DatabaseFixture fixture)
     [Fact]
     public async Task CreateRestaurant_WithValidData_CreatesRestaurantAndOwnerMembership()
     {
-        using var client = await CreateAuthenticatedClientAsync();
+        using var user = await fixture.CreateAuthenticatedClientAsync();
 
-        var csrfToken = await GetCsrfTokenAsync(client);
+        var csrfToken = await user.Client.GetCsrfTokenAsync();
         var cnpj = CreateValidCnpj();
 
         using var request = new HttpRequestMessage(
@@ -86,7 +83,7 @@ public sealed class CreateRestaurantTests(DatabaseFixture fixture)
 
         request.Headers.Add("X-CSRF-TOKEN", csrfToken);
 
-        using var response = await client.SendAsync(request);
+        using var response = await user.Client.SendAsync(request);
 
         var responseBody = await response.Content.ReadAsStringAsync();
 
@@ -120,85 +117,6 @@ public sealed class CreateRestaurantTests(DatabaseFixture fixture)
 
         Assert.Equal(RestaurantRole.Owner, membership.Role);
         Assert.Equal(MembershipStatus.Active, membership.Status);
-    }
-
-    private async Task<HttpClient> CreateAuthenticatedClientAsync()
-    {
-        var client = fixture.CreateClient();
-
-        try
-        {
-            var email = $"user-{Guid.NewGuid():N}@example.com";
-
-            var registrationToken = await GetCsrfTokenAsync(client);
-
-            using var registrationRequest = new HttpRequestMessage(
-                HttpMethod.Post,
-                "/api/auth/register")
-            {
-                Content = JsonContent.Create(new
-                {
-                    email,
-                    password = Password
-                })
-            };
-
-            registrationRequest.Headers.Add(
-                "X-CSRF-TOKEN",
-                registrationToken);
-
-            using var registrationResponse = await client.SendAsync(
-                registrationRequest);
-
-            Assert.Equal(
-                HttpStatusCode.Created,
-                registrationResponse.StatusCode);
-
-            var loginToken = await GetCsrfTokenAsync(client);
-
-            using var loginRequest = new HttpRequestMessage(
-                HttpMethod.Post,
-                "/api/auth/login")
-            {
-                Content = JsonContent.Create(new
-                {
-                    email,
-                    password = Password
-                })
-            };
-
-            loginRequest.Headers.Add(
-                "X-CSRF-TOKEN",
-                loginToken);
-
-            using var loginResponse = await client.SendAsync(loginRequest);
-
-            Assert.Equal(
-                HttpStatusCode.NoContent,
-                loginResponse.StatusCode);
-
-            return client;
-        }
-        catch
-        {
-            client.Dispose();
-            throw;
-        }
-    }
-
-    private static async Task<string> GetCsrfTokenAsync(HttpClient client)
-    {
-        using var response = await client.GetAsync(
-            "/api/auth/csrf-token");
-
-        response.EnsureSuccessStatusCode();
-
-        using var document = JsonDocument.Parse(
-            await response.Content.ReadAsStringAsync());
-
-        return document.RootElement
-            .GetProperty("requestToken")
-            .GetString()!;
     }
 
     private static object CreateRequest(

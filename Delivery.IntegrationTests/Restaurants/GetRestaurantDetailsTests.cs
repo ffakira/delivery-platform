@@ -1,4 +1,3 @@
-
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -6,11 +5,8 @@ using Delivery.Application.Restaurants.Queries;
 using Delivery.Domain.Restaurants.Entities;
 using Delivery.Domain.Restaurants.Enums;
 using Delivery.Domain.Restaurants.ValueObjects;
-using Delivery.Infrastructure.Identity;
 using Delivery.Infrastructure.Persistence;
 using Delivery.IntegrationTests.Infrastructure;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Delivery.IntegrationTests.Restaurants;
@@ -18,15 +14,13 @@ namespace Delivery.IntegrationTests.Restaurants;
 [Collection(DatabaseCollection.Name)]
 public sealed class GetRestaurantDetailsTests(DatabaseFixture fixture)
 {
-    private const string Password = "StrongPassword123!";
-
     private static readonly DateTime CreatedAtUtc =
         new(2026, 10, 30, 12, 0, 0, DateTimeKind.Utc);
 
     [Fact]
     public async Task GetRestaurantDetails_WithActiveOwner_ReturnsRestaurantDetails()
     {
-        using var owner = await CreateAuthenticatedClientAsync();
+        using var owner = await fixture.CreateAuthenticatedClientAsync();
 
         var restaurantId = await SeedRestaurantAsync(owner.UserId);
 
@@ -54,8 +48,8 @@ public sealed class GetRestaurantDetailsTests(DatabaseFixture fixture)
     [Fact]
     public async Task GetRestaurantDetails_WithActiveManager_ReturnsRestaurantDetails()
     {
-        using var owner = await CreateAuthenticatedClientAsync();
-        using var manager = await CreateAuthenticatedClientAsync();
+        using var owner = await fixture.CreateAuthenticatedClientAsync();
+        using var manager = await fixture.CreateAuthenticatedClientAsync();
 
         var restaurantId = await SeedRestaurantAsync(
             owner.UserId,
@@ -78,8 +72,8 @@ public sealed class GetRestaurantDetailsTests(DatabaseFixture fixture)
     [Fact]
     public async Task GetRestaurantDetails_WithInvitedMembership_ReturnsNotFound()
     {
-        using var owner = await CreateAuthenticatedClientAsync();
-        using var invitedUser = await CreateAuthenticatedClientAsync();
+        using var owner = await fixture.CreateAuthenticatedClientAsync();
+        using var invitedUser = await fixture.CreateAuthenticatedClientAsync();
 
         var restaurantId = await SeedRestaurantAsync(
             owner.UserId,
@@ -95,8 +89,8 @@ public sealed class GetRestaurantDetailsTests(DatabaseFixture fixture)
     [Fact]
     public async Task GetRestaurantDetails_WithSuspendedMembership_ReturnsNotFound()
     {
-        using var owner = await CreateAuthenticatedClientAsync();
-        using var suspendedUser = await CreateAuthenticatedClientAsync();
+        using var owner = await fixture.CreateAuthenticatedClientAsync();
+        using var suspendedUser = await fixture.CreateAuthenticatedClientAsync();
 
         var restaurantId = await SeedRestaurantAsync(
             owner.UserId,
@@ -112,8 +106,8 @@ public sealed class GetRestaurantDetailsTests(DatabaseFixture fixture)
     [Fact]
     public async Task GetRestaurantDetails_WithUserWithoutMembership_ReturnsNotFound()
     {
-        using var owner = await CreateAuthenticatedClientAsync();
-        using var unrelatedUser = await CreateAuthenticatedClientAsync();
+        using var owner = await fixture.CreateAuthenticatedClientAsync();
+        using var unrelatedUser = await fixture.CreateAuthenticatedClientAsync();
 
         var restaurantId = await SeedRestaurantAsync(owner.UserId);
 
@@ -126,7 +120,7 @@ public sealed class GetRestaurantDetailsTests(DatabaseFixture fixture)
     [Fact]
     public async Task GetRestaurantDetails_WithUnknownRestaurantId_ReturnsNotFound()
     {
-        using var user = await CreateAuthenticatedClientAsync();
+        using var user = await fixture.CreateAuthenticatedClientAsync();
 
         using var response = await user.Client.GetAsync(
             $"/api/restaurants/{Guid.NewGuid()}");
@@ -203,94 +197,6 @@ public sealed class GetRestaurantDetailsTests(DatabaseFixture fixture)
         return restaurant.Id;
     }
 
-    private async Task<AuthenticatedClient> CreateAuthenticatedClientAsync()
-    {
-        var client = fixture.CreateClient();
-
-        try
-        {
-            var email = $"user-{Guid.NewGuid():N}@example.com";
-
-            var registrationToken = await GetCsrfTokenAsync(client);
-
-            using var registrationRequest = new HttpRequestMessage(
-                HttpMethod.Post,
-                "/api/auth/register")
-            {
-                Content = JsonContent.Create(new
-                {
-                    email,
-                    password = Password
-                })
-            };
-
-            registrationRequest.Headers.Add(
-                "X-CSRF-TOKEN",
-                registrationToken);
-
-            using var registrationResponse = await client.SendAsync(
-                registrationRequest);
-
-            Assert.Equal(
-                HttpStatusCode.Created,
-                registrationResponse.StatusCode);
-
-            var loginToken = await GetCsrfTokenAsync(client);
-
-            using var loginRequest = new HttpRequestMessage(
-                HttpMethod.Post,
-                "/api/auth/login")
-            {
-                Content = JsonContent.Create(new
-                {
-                    email,
-                    password = Password
-                })
-            };
-
-            loginRequest.Headers.Add(
-                "X-CSRF-TOKEN",
-                loginToken);
-
-            using var loginResponse = await client.SendAsync(loginRequest);
-
-            Assert.Equal(
-                HttpStatusCode.NoContent,
-                loginResponse.StatusCode);
-
-            await using var scope = fixture.Services.CreateAsyncScope();
-
-            var userManager = scope.ServiceProvider
-                .GetRequiredService<UserManager<ApplicationUser>>();
-
-            var user = await userManager.FindByEmailAsync(email);
-
-            Assert.NotNull(user);
-
-            return new AuthenticatedClient(client, user.Id);
-        }
-        catch
-        {
-            client.Dispose();
-            throw;
-        }
-    }
-
-    private static async Task<string> GetCsrfTokenAsync(HttpClient client)
-    {
-        using var response = await client.GetAsync(
-            "/api/auth/csrf-token");
-
-        response.EnsureSuccessStatusCode();
-
-        using var document = System.Text.Json.JsonDocument.Parse(
-            await response.Content.ReadAsStringAsync());
-
-        return document.RootElement
-            .GetProperty("requestToken")
-            .GetString()!;
-    }
-
     private static string CreateValidCnpj()
     {
         var baseNumber =
@@ -318,12 +224,5 @@ public sealed class GetRestaurantDetailsTests(DatabaseFixture fixture)
         var remainder = sum % 11;
 
         return remainder < 2 ? 0 : 11 - remainder;
-    }
-
-    private sealed record AuthenticatedClient(
-        HttpClient Client,
-        Guid UserId) : IDisposable
-    {
-        public void Dispose() => Client.Dispose();
     }
 }
