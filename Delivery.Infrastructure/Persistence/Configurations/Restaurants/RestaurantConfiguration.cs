@@ -75,5 +75,14 @@ public sealed class RestaurantConfiguration : IEntityTypeConfiguration<Restauran
         builder.Navigation(r => r.Memberships)
             .HasField("_memberships")
             .UsePropertyAccessMode(PropertyAccessMode.Field);
+        
+        builder.HasMany(r => r.Invitations)
+            .WithOne()
+            .HasForeignKey(i => i.RestaurantId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Navigation(r => r.Invitations)
+            .HasField("_invitations")
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }

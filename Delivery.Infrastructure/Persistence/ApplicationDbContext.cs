@@ -1,4 +1,3 @@
-using System;
 using Delivery.Domain.Restaurants.Entities;
 using Delivery.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
@@ -12,6 +11,9 @@ public sealed class ApplicationDbContext(
     : IdentityDbContext<ApplicationUser, IdentityRole<Guid>, Guid>(options)
 {
     public DbSet<Restaurant> Restaurants => Set<Restaurant>();
+    
+    public DbSet<RestaurantInvitation> RestaurantInvitations =>
+        Set<RestaurantInvitation>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

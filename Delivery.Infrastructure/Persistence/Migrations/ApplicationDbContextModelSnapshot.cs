@@ -48,6 +48,69 @@ namespace Delivery.Infrastructure.Persistence.Migrations
                     b.ToTable("Restaurants", (string)null);
                 });
 
+            modelBuilder.Entity("Delivery.Domain.Restaurants.Entities.RestaurantInvitation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("AcceptedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("AcceptedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("InvitedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RestaurantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcceptedByUserId");
+
+                    b.HasIndex("InvitedByUserId");
+
+                    b.HasIndex("RestaurantId")
+                        .HasDatabaseName("IX_RestaurantInvitations_RestaurantId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("UX_RestaurantInvitations_TokenHash");
+
+                    b.HasIndex("RestaurantId", "Email")
+                        .IsUnique()
+                        .HasDatabaseName("UX_RestaurantInvitations_Pending_RestaurantId_Email")
+                        .HasFilter("\"Status\" = 1");
+
+                    b.ToTable("RestaurantInvitations", (string)null);
+                });
+
             modelBuilder.Entity("Delivery.Domain.Restaurants.Entities.RestaurantMembership", b =>
                 {
                     b.Property<Guid>("Id")
@@ -335,6 +398,26 @@ namespace Delivery.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Delivery.Domain.Restaurants.Entities.RestaurantInvitation", b =>
+                {
+                    b.HasOne("Delivery.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("AcceptedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Delivery.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("InvitedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Delivery.Domain.Restaurants.Entities.Restaurant", null)
+                        .WithMany("Invitations")
+                        .HasForeignKey("RestaurantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Delivery.Domain.Restaurants.Entities.RestaurantMembership", b =>
                 {
                     b.HasOne("Delivery.Domain.Restaurants.Entities.Restaurant", null)
@@ -403,6 +486,8 @@ namespace Delivery.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Delivery.Domain.Restaurants.Entities.Restaurant", b =>
                 {
+                    b.Navigation("Invitations");
+
                     b.Navigation("Memberships");
                 });
 #pragma warning restore 612, 618

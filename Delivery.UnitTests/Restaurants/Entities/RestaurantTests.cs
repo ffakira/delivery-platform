@@ -1,4 +1,3 @@
-
 using Delivery.Domain.Restaurants.Entities;
 using Delivery.Domain.Restaurants.Enums;
 using Delivery.Domain.Restaurants.ValueObjects;
@@ -18,6 +17,9 @@ public sealed class RestaurantTests
 
     private static readonly DateTime CreatedAtUtc =
         new(2026, 10, 30, 12, 0, 0, DateTimeKind.Utc);
+
+    private static readonly DateTime InvitationExpiresAtUtc =
+        CreatedAtUtc.AddDays(7);
 
     [Fact]
     public void Create_WithValidData_CreatesRestaurant()
@@ -50,6 +52,14 @@ public sealed class RestaurantTests
         Assert.Equal(MembershipStatus.Active, ownerMembership.Status);
         Assert.Equal(CreatedAtUtc, ownerMembership.CreatedAtUtc);
         Assert.Equal(CreatedAtUtc, ownerMembership.ActivatedAtUtc);
+    }
+
+    [Fact]
+    public void Create_WithValidData_StartsWithEmptyInvitationCollection()
+    {
+        var restaurant = CreateRestaurant();
+
+        Assert.Empty(restaurant.Invitations);
     }
 
     [Theory]
@@ -232,6 +242,236 @@ public sealed class RestaurantTests
                 ManagerUserId,
                 (RestaurantRole)999,
                 CreatedAtUtc.AddMinutes(10)));
+    }
+
+    [Fact]
+    public void InviteByEmail_WithManagerRole_AddsPendingInvitation()
+    {
+        var restaurant = CreateRestaurant();
+        var invitedAtUtc = CreatedAtUtc.AddMinutes(10);
+
+        var invitation = restaurant.InviteByEmail(
+            "manager@example.com",
+            RestaurantRole.Manager,
+            "manager-token-hash",
+            OwnerUserId,
+            invitedAtUtc,
+            InvitationExpiresAtUtc);
+
+        Assert.NotEqual(Guid.Empty, invitation.Id);
+        Assert.Equal(restaurant.Id, invitation.RestaurantId);
+        Assert.Equal("manager@example.com", invitation.Email);
+        Assert.Equal(RestaurantRole.Manager, invitation.Role);
+        Assert.Equal("manager-token-hash", invitation.TokenHash);
+        Assert.Equal(OwnerUserId, invitation.InvitedByUserId);
+        Assert.Equal(InvitationStatus.Pending, invitation.Status);
+        Assert.Equal(invitedAtUtc, invitation.CreatedAtUtc);
+        Assert.Equal(InvitationExpiresAtUtc, invitation.ExpiresAtUtc);
+        Assert.Contains(invitation, restaurant.Invitations);
+        Assert.Single(restaurant.Invitations);
+    }
+
+    [Fact]
+    public void InviteByEmail_WithStaffRole_AddsPendingInvitation()
+    {
+        var restaurant = CreateRestaurant();
+
+        var invitation = restaurant.InviteByEmail(
+            "staff@example.com",
+            RestaurantRole.Staff,
+            "staff-token-hash",
+            OwnerUserId,
+            CreatedAtUtc,
+            InvitationExpiresAtUtc);
+
+        Assert.Equal(RestaurantRole.Staff, invitation.Role);
+        Assert.Equal(InvitationStatus.Pending, invitation.Status);
+        Assert.Single(restaurant.Invitations);
+    }
+
+    [Fact]
+    public void InviteByEmail_WithDifferentEmail_AddsSeparateInvitations()
+    {
+        var restaurant = CreateRestaurant();
+
+        var firstInvitation = restaurant.InviteByEmail(
+            "manager@example.com",
+            RestaurantRole.Manager,
+            "first-token-hash",
+            OwnerUserId,
+            CreatedAtUtc,
+            InvitationExpiresAtUtc);
+
+        var secondInvitation = restaurant.InviteByEmail(
+            "staff@example.com",
+            RestaurantRole.Staff,
+            "second-token-hash",
+            OwnerUserId,
+            CreatedAtUtc.AddMinutes(1),
+            InvitationExpiresAtUtc);
+
+        Assert.Equal(2, restaurant.Invitations.Count);
+        Assert.Contains(firstInvitation, restaurant.Invitations);
+        Assert.Contains(secondInvitation, restaurant.Invitations);
+    }
+
+    [Fact]
+    public void InviteByEmail_WithDuplicatePendingEmail_ThrowsInvalidOperationException()
+    {
+        var restaurant = CreateRestaurant();
+
+        restaurant.InviteByEmail(
+            "manager@example.com",
+            RestaurantRole.Manager,
+            "first-token-hash",
+            OwnerUserId,
+            CreatedAtUtc,
+            InvitationExpiresAtUtc);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            restaurant.InviteByEmail(
+                "manager@example.com",
+                RestaurantRole.Staff,
+                "second-token-hash",
+                OwnerUserId,
+                CreatedAtUtc.AddMinutes(1),
+                InvitationExpiresAtUtc));
+    }
+
+    [Fact]
+    public void InviteByEmail_WithDifferentEmailCasing_RejectsDuplicatePendingInvitation()
+    {
+        var restaurant = CreateRestaurant();
+
+        restaurant.InviteByEmail(
+            "manager@example.com",
+            RestaurantRole.Manager,
+            "first-token-hash",
+            OwnerUserId,
+            CreatedAtUtc,
+            InvitationExpiresAtUtc);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            restaurant.InviteByEmail(
+                "MANAGER@EXAMPLE.COM",
+                RestaurantRole.Staff,
+                "second-token-hash",
+                OwnerUserId,
+                CreatedAtUtc.AddMinutes(1),
+                InvitationExpiresAtUtc));
+    }
+
+    [Fact]
+    public void InviteByEmail_AfterPreviousInvitationWasRevoked_AllowsNewInvitation()
+    {
+        var restaurant = CreateRestaurant();
+
+        var firstInvitation = restaurant.InviteByEmail(
+            "manager@example.com",
+            RestaurantRole.Manager,
+            "first-token-hash",
+            OwnerUserId,
+            CreatedAtUtc,
+            InvitationExpiresAtUtc);
+
+        firstInvitation.Revoke(CreatedAtUtc.AddMinutes(5));
+
+        var secondInvitation = restaurant.InviteByEmail(
+            "manager@example.com",
+            RestaurantRole.Manager,
+            "second-token-hash",
+            OwnerUserId,
+            CreatedAtUtc.AddMinutes(10),
+            InvitationExpiresAtUtc);
+
+        Assert.Equal(InvitationStatus.Revoked, firstInvitation.Status);
+        Assert.Equal(InvitationStatus.Pending, secondInvitation.Status);
+        Assert.Equal(2, restaurant.Invitations.Count);
+    }
+
+    [Fact]
+    public void InviteByEmail_WithOwnerRole_ThrowsArgumentException()
+    {
+        var restaurant = CreateRestaurant();
+
+        Assert.Throws<ArgumentException>(() =>
+            restaurant.InviteByEmail(
+                "manager@example.com",
+                RestaurantRole.Owner,
+                "token-hash",
+                OwnerUserId,
+                CreatedAtUtc,
+                InvitationExpiresAtUtc));
+
+        Assert.Empty(restaurant.Invitations);
+    }
+
+    [Fact]
+    public void InviteByEmail_WithEmptyInviterId_ThrowsArgumentException()
+    {
+        var restaurant = CreateRestaurant();
+
+        Assert.Throws<ArgumentException>(() =>
+            restaurant.InviteByEmail(
+                "manager@example.com",
+                RestaurantRole.Manager,
+                "token-hash",
+                Guid.Empty,
+                CreatedAtUtc,
+                InvitationExpiresAtUtc));
+
+        Assert.Empty(restaurant.Invitations);
+    }
+
+    [Fact]
+    public void InviteByEmail_WithInvalidEmail_ThrowsArgumentException()
+    {
+        var restaurant = CreateRestaurant();
+
+        Assert.Throws<ArgumentException>(() =>
+            restaurant.InviteByEmail(
+                "invalid-email",
+                RestaurantRole.Manager,
+                "token-hash",
+                OwnerUserId,
+                CreatedAtUtc,
+                InvitationExpiresAtUtc));
+
+        Assert.Empty(restaurant.Invitations);
+    }
+
+    [Fact]
+    public void InviteByEmail_WithEmptyTokenHash_ThrowsArgumentException()
+    {
+        var restaurant = CreateRestaurant();
+
+        Assert.Throws<ArgumentException>(() =>
+            restaurant.InviteByEmail(
+                "manager@example.com",
+                RestaurantRole.Manager,
+                "",
+                OwnerUserId,
+                CreatedAtUtc,
+                InvitationExpiresAtUtc));
+
+        Assert.Empty(restaurant.Invitations);
+    }
+
+    [Fact]
+    public void InviteByEmail_WithExpirationBeforeCreation_ThrowsArgumentException()
+    {
+        var restaurant = CreateRestaurant();
+
+        Assert.Throws<ArgumentException>(() =>
+            restaurant.InviteByEmail(
+                "manager@example.com",
+                RestaurantRole.Manager,
+                "token-hash",
+                OwnerUserId,
+                CreatedAtUtc,
+                CreatedAtUtc));
+
+        Assert.Empty(restaurant.Invitations);
     }
 
     private static Restaurant CreateRestaurant()

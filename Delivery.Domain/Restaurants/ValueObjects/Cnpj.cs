@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 
 namespace Delivery.Domain.Restaurants.ValueObjects;
 
@@ -20,7 +21,9 @@ public sealed record Cnpj
         return cnpj;
     }
 
-    public static bool TryCreate(string? value, out Cnpj? cnpj)
+    public static bool TryCreate(
+        string? value, 
+        [NotNullWhen(true)] out Cnpj? cnpj)
     {
         cnpj = null;
 

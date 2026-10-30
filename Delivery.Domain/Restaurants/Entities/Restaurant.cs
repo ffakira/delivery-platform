@@ -1,4 +1,3 @@
-
 using Delivery.Domain.Restaurants.Enums;
 using Delivery.Domain.Restaurants.ValueObjects;
 
@@ -7,6 +6,7 @@ namespace Delivery.Domain.Restaurants.Entities;
 public sealed class Restaurant
 {
     private readonly List<RestaurantMembership> _memberships = [];
+    private readonly List<RestaurantInvitation> _invitations = [];
 
     public Guid Id { get; }
     public string Name { get; private set; }
@@ -16,6 +16,9 @@ public sealed class Restaurant
 
     public IReadOnlyCollection<RestaurantMembership> Memberships =>
         _memberships.AsReadOnly();
+
+    public IReadOnlyCollection<RestaurantInvitation> Invitations =>
+        _invitations.AsReadOnly();
 
     private Restaurant()
     {
@@ -91,6 +94,28 @@ public sealed class Restaurant
         RestaurantRole role,
         DateTime invitedAtUtc)
     {
+        if (userId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "User ID cannot be empty.",
+                nameof(userId));
+        }
+
+        if (role == RestaurantRole.Owner)
+        {
+            throw new ArgumentException(
+                "Owner role cannot be assigned through an invitation.",
+                nameof(role));
+        }
+
+        if (!Enum.IsDefined(role))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(role),
+                role,
+                "The specified restaurant role is invalid.");
+        }
+
         if (_memberships.Any(membership => membership.UserId == userId))
         {
             throw new InvalidOperationException(
@@ -106,5 +131,42 @@ public sealed class Restaurant
         _memberships.Add(membership);
 
         return membership;
+    }
+
+    public RestaurantInvitation InviteByEmail(
+        string email,
+        RestaurantRole role,
+        string tokenHash,
+        Guid invitedByUserId,
+        DateTime createdAtUtc,
+        DateTime expiresAtUtc)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(email);
+
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+
+        if (_invitations.Any(invitation =>
+                invitation.Status == InvitationStatus.Pending &&
+                string.Equals(
+                    invitation.Email,
+                    normalizedEmail,
+                    StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                "This email already has a pending invitation.");
+        }
+
+        var invitation = RestaurantInvitation.Create(
+            Id,
+            normalizedEmail,
+            role,
+            tokenHash,
+            invitedByUserId,
+            createdAtUtc,
+            expiresAtUtc);
+
+        _invitations.Add(invitation);
+
+        return invitation;
     }
 }
