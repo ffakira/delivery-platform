@@ -1,7 +1,7 @@
 using System.IO;
 using Delivery.Api.Endpoints;
 using Delivery.Api.Extensions;
-using Delivery.Api.Infrastructure.Persistence;
+using Delivery.Infrastructure.Persistence;
 using DotNetEnv;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;

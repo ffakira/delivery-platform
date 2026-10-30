@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Delivery.Api.Infrastructure.Persistence;
+namespace Delivery.Infrastructure.Persistence;
 
 public static class DependencyInjection
 {

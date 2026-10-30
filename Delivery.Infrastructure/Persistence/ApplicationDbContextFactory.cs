@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
 
-namespace Delivery.Api.Infrastructure.Persistence;
+namespace Delivery.Infrastructure.Persistence;
 
 public sealed class ApplicationDbContextFactory
     : IDesignTimeDbContextFactory<ApplicationDbContext>

@@ -1,4 +1,4 @@
-using Delivery.Api.Infrastructure.Persistence;
+using Delivery.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

@@ -1,5 +1,8 @@
 <Solution>
   <Project Path="Delivery.Api/Delivery.Api.csproj" />
+  <Project Path="Delivery.Application/Delivery.Application.csproj" />
+  <Project Path="Delivery.Domain/Delivery.Domain.csproj" />
+  <Project Path="Delivery.Infrastructure/Delivery.Infrastructure.csproj" />
   <Project Path="Delivery.IntegrationTests/Delivery.IntegrationTests.csproj" />
   <Project Path="Delivery.UnitTests/Delivery.UnitTests.csproj" />
 </Solution>

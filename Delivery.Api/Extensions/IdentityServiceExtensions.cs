@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
-using Delivery.Api.Infrastructure.Identity;
-using Delivery.Api.Infrastructure.Persistence;
+using Delivery.Infrastructure.Identity;
+using Delivery.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
