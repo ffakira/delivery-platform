@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Delivery.Api.Infrastructure.Identity;
 using Microsoft.AspNetCore.Antiforgery;
@@ -21,6 +22,9 @@ public static class AuthEndpoints
             .AllowAnonymous();
 
         group.MapPost("/login", Login)
+            .AllowAnonymous();
+
+        group.MapPost("/register", Register)
             .AllowAnonymous();
 
         group.MapPost("/logout", Logout)
@@ -75,6 +79,41 @@ public static class AuthEndpoints
         return Results.NoContent();
     }
 
+    private static async Task<IResult> Register(RegisterRequest request, HttpContext context, IAntiforgery antiforgery,
+        UserManager<ApplicationUser> userManager)
+    {
+        if (!await IsAntiforgeryValid(context, antiforgery))
+        {
+            return Results.BadRequest(new { message = "Invalid anti-forgery token." });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+        {
+            return Results.BadRequest(new { message = "Email and password is required" });
+        }
+
+        var user = new ApplicationUser
+        {
+            UserName = request.Email,
+            Email = request.Email,
+        };
+
+        var result = await userManager.CreateAsync(user, request.Password);
+
+        if (!result.Succeeded)
+        {
+            return Results.BadRequest(new
+                { message = "Registration failed.", errors = result.Errors.Select(error => error.Description) });
+        }
+
+        return Results.Created(
+            "/api/auth/me", new
+            {
+                id = user.Id,
+                email = user.Email
+            });
+    }
+
     private static async Task<IResult> Logout(HttpContext context, IAntiforgery antiforgery,
         SignInManager<ApplicationUser> signInManager)
     {
@@ -125,6 +164,8 @@ public static class AuthEndpoints
     }
 
     private sealed record LoginRequest(string? Email, string? Password);
+
+    private sealed record RegisterRequest(string? Email, string? Password);
 
     private sealed record CurrentUserResponse(Guid Id, string? Email, IList<string> Roles);
 }

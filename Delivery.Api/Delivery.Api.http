@@ -1,6 +1,45 @@
-@Delivery.Api_HostAddress = http://localhost:5049
+#@baseUrl = http://localhost:5049
+@baseUrl = https://localhost:7235
 
-GET {{Delivery.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### Get OpenAPI document
+GET {{baseUrl}}/openapi/v1.json
 
-###
+### Get CSRF token
+GET {{baseUrl}}/api/auth/csrf-token
+
+> {%
+    client.test("CSRF token was issued", function() {
+        client.assert(response.status === 200, "Expected HTTP 2000");
+        client.assert(response.body.requestToken, "Expected requestToken is response");
+    });
+
+    client.global.set("csrfToken", response.body.requestToken);
+%}
+
+### Register
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+X-CSRF-TOKEN: {{csrfToken}}
+
+{
+  "email": "test@example.com",
+  "password": "StrongPassword123!"
+}
+
+### Login
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+X-CSRF-TOKEN: {{csrfToken}}
+
+{
+  "email": "test@example.com",
+  "password": "StrongPassword123!"
+}
+
+### Me
+GET {{baseUrl}}/api/auth/me
+Content-Type: application/json
+
+### Logout
+POST {{baseUrl}}/api/auth/logout
+X-CSRF-TOKEN: {{csrfToken}}
