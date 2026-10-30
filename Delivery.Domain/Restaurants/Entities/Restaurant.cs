@@ -17,6 +17,13 @@ public sealed class Restaurant
     public IReadOnlyCollection<RestaurantMembership> Memberships =>
         _memberships.AsReadOnly();
 
+    private Restaurant()
+    {
+        Name = null!;
+        Cnpj = null!;
+        Address = null!;
+    }
+
     private Restaurant(
         Guid id,
         string name,
