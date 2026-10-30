@@ -16,4 +16,8 @@ public interface IRestaurantRepository
         Guid restaurantId,
         Guid userId,
         CancellationToken cancellationToken = default);
+
+    Task<Restaurant?> FindByInvitationTokenHashAsync(
+        string tokenHash,
+        CancellationToken cancellationToken = default);
 }

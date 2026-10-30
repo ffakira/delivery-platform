@@ -55,4 +55,20 @@ public class EfRestaurantRepository(
                     membership.Status == MembershipStatus.Active))
             .SingleOrDefaultAsync(cancellationToken);
     }
+
+    public async Task<Restaurant?> FindByInvitationTokenHashAsync(
+        string tokenHash,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tokenHash);
+        
+        return await dbContext.Restaurants
+            .Where(restaurant => 
+                restaurant.Invitations.Any(invitation =>
+                    invitation.TokenHash == tokenHash))
+            .Include(restaurant => restaurant.Memberships)
+            .Include(restaurant => restaurant.Invitations)
+            .AsSingleQuery()
+            .SingleOrDefaultAsync(cancellationToken);
+    }
 }

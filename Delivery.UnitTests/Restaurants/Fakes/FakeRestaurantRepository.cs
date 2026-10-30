@@ -55,4 +55,18 @@ public sealed class FakeRestaurantRepository(
 
         return Task.FromResult(restaurant);
     }
+
+    public Task<Restaurant?> FindByInvitationTokenHashAsync(
+        string tokenHash,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tokenHash);
+        cancellationToken.ThrowIfCancellationRequested();
+        
+        var restaurant = _restaurants.SingleOrDefault(item =>
+            item.Invitations.Any(invitation =>
+                invitation.TokenHash == tokenHash));
+
+        return Task.FromResult(restaurant);
+    }
 }

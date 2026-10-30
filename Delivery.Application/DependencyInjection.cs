@@ -11,6 +11,7 @@ public static class DependencyInjection
         services.AddSingleton(TimeProvider.System);
 
         services.AddScoped<CreateRestaurantService>();
+        services.AddScoped<CreateRestaurantInvitationService>();
         services.AddScoped<ListMyRestaurantsService>();
         services.AddScoped<GetRestaurantDetailsService>();
 
