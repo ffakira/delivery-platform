@@ -1,4 +1,3 @@
-using System;
 using System.IO;
 using Delivery.Api.Endpoints;
 using Delivery.Api.Extensions;
@@ -10,17 +9,18 @@ using Microsoft.Extensions.Hosting;
 
 var rootDirectory = Directory.GetCurrentDirectory();
 
-while (!string.IsNullOrEmpty(rootDirectory) && !File.Exists(Path.Combine(rootDirectory, ".env")))
+while (!string.IsNullOrEmpty(rootDirectory))
 {
+    var envPath = Path.Combine(rootDirectory, ".env");
+
+    if (File.Exists(envPath))
+    {
+        Env.Load(envPath);
+        break;
+    }
+
     rootDirectory = Directory.GetParent(rootDirectory)?.FullName ?? string.Empty;
 }
-
-if (string.IsNullOrEmpty(rootDirectory))
-{
-    throw new InvalidOperationException("Could not locate the project-root .env file.");
-}
-
-Env.Load(Path.Combine(rootDirectory, ".env"));
 
 var builder = WebApplication.CreateBuilder(args);
 
