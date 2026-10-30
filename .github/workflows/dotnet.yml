@@ -25,10 +25,13 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore DeliveryPlatform.slnx
 
       - name: Build solution
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build DeliveryPlatform.slnx --no-restore --configuration Release
 
       - name: Run unit tests
-        run: dotnet test --no-build --configuration Release --logger "console;verbosity=normal"
+        run: dotnet test Delivery.UnitTests/Delivery.UnitTests.csproj --no-build --configuration Release --logger "console;verbosity=normal"
+
+      - name: Run integration tests
+        run: dotnet test Delivery.IntegrationTests/Delivery.IntegrationTests.csproj --no-build --configuration Release --logger "console;verbosity=normal"

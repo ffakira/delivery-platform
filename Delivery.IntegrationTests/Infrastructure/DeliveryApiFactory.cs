@@ -4,20 +4,24 @@ using Microsoft.Extensions.Configuration;
 
 namespace Delivery.IntegrationTests.Infrastructure;
 
-public sealed class DeliveryApiFactory(string connectionString)
-    : WebApplicationFactory<Program>
+public sealed class DeliveryApiFactory : WebApplicationFactory<Program>
 {
+    public DeliveryApiFactory(string connectionString)
+    {
+        Environment.SetEnvironmentVariable(
+            "ConnectionStrings__DefaultConnection",
+            connectionString);
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.ConfigureAppConfiguration((_, config) =>
+        builder.ConfigureAppConfiguration((_, configuration) =>
         {
-            var settings = new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:DefaultConnection"] = connectionString,
-                ["Cors:AllowedOrigin:0"] = "http://localhost"
-            };
-
-            config.AddInMemoryCollection(settings);
+            configuration.AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["Cors:AllowedOrigins:0"] = "https://localhost"
+                });
         });
     }
 }
