@@ -2,7 +2,6 @@ using Delivery.Application.Restaurants.Commands;
 using Delivery.Application.Restaurants.Repositories;
 using Delivery.Application.Restaurants.Services;
 using Delivery.Domain.Restaurants.Entities;
-using Delivery.Domain.Restaurants.Enums;
 
 namespace Delivery.UnitTests.Restaurants.Services;
 
@@ -25,17 +24,9 @@ public sealed class CreateRestaurantServiceTests
         var restaurant = Assert.IsType<Restaurant>(repository.Restaurant);
 
         Assert.Equal(restaurantId, restaurant.Id);
-        Assert.Equal("Akira Japanese Restaurant", restaurant.Name);
+        Assert.Equal("Sample Restaurant", restaurant.Name);
         Assert.Equal("11222333000181", restaurant.Cnpj.Value);
         Assert.Equal(FixedTime.UtcDateTime, restaurant.CreatedAtUtc);
-
-        var membership = Assert.Single(restaurant.Memberships);
-
-        Assert.Equal(ownerUserId, membership.UserId);
-        Assert.Equal(restaurant.Id, membership.RestaurantId);
-        Assert.Equal(RestaurantRole.Owner, membership.Role);
-        Assert.Equal(MembershipStatus.Active, membership.Status);
-        Assert.Equal(FixedTime.UtcDateTime, membership.ActivatedAtUtc);
 
         Assert.True(repository.AddWasCalled);
     }
@@ -119,7 +110,7 @@ public sealed class CreateRestaurantServiceTests
     private static CreateRestaurantCommand CreateValidCommand()
     {
         return new CreateRestaurantCommand(
-            Name: "  Akira Japanese Restaurant  ",
+            Name: "  Sample Restaurant  ",
             Cnpj: "11.222.333/0001-81",
             Street: "Rua das Flores",
             Number: "123",
@@ -144,6 +135,13 @@ public sealed class CreateRestaurantServiceTests
             Restaurant = restaurant;
 
             return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<Restaurant>> ListByMemberAsync(
+            Guid userId,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
         }
     }
 

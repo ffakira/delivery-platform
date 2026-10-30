@@ -1,5 +1,7 @@
 using Delivery.Application.Restaurants.Repositories;
 using Delivery.Domain.Restaurants.Entities;
+using Delivery.Domain.Restaurants.Enums;
+using Microsoft.EntityFrameworkCore;
 
 namespace Delivery.Infrastructure.Persistence.Repositories.Restaurants;
 
@@ -15,5 +17,23 @@ public class EfRestaurantRepository(
             cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Restaurant>> ListByMemberAsync(
+        Guid userId, 
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Restaurants
+            .AsNoTracking()
+            .Where(restaurant =>
+                restaurant.Memberships.Any(membership =>
+                    membership.UserId == userId &&
+                    membership.Status == MembershipStatus.Active))
+            .Include(restaurant =>
+                restaurant.Memberships.Where(membership =>
+                    membership.UserId == userId &&
+                    membership.Status == MembershipStatus.Active))
+            .OrderBy(restaurant => restaurant.Name)
+            .ToListAsync(cancellationToken);
     }
 }

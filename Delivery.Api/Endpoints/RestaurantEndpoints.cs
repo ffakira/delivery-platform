@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Delivery.Api.Endpoints.Security;
 using Delivery.Application.Restaurants.Commands;
+using Delivery.Application.Restaurants.Queries;
 using Delivery.Application.Restaurants.Services;
 using Delivery.Infrastructure.Identity;
 using Microsoft.AspNetCore.Antiforgery;
@@ -24,6 +25,7 @@ public static class RestaurantEndpoints
             .RequireAuthorization();
 
         group.MapPost("/", CreateRestaurant);
+        group.MapGet("/", ListMyRestaurants);
 
         return endpoints;
     }
@@ -76,6 +78,28 @@ public static class RestaurantEndpoints
             return Results.BadRequest(
                 new { message = exception.Message });
         }
+    }
+
+    private static async Task<IResult> ListMyRestaurants(
+        HttpContext context,
+        UserManager<ApplicationUser> userManager,
+        ListMyRestaurantsService listMyRestaurantsService,
+        CancellationToken cancellationToken)
+    {
+        var user = await userManager.GetUserAsync(context.User);
+
+        if (user is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var query = new ListMyRestaurantsQuery(user.Id);
+
+        var restaurants = await listMyRestaurantsService.ExecuteAsync(
+            query,
+            cancellationToken);
+        
+        return Results.Ok(restaurants);
     }
 
     private sealed record CreateRestaurantRequest(
