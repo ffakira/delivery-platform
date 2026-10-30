@@ -43,3 +43,20 @@ Content-Type: application/json
 ### Logout
 POST {{baseUrl}}/api/auth/logout
 X-CSRF-TOKEN: {{csrfToken}}
+
+### Create Restaurant
+POST {{baseUrl}}/api/restaraunts
+Content-Type: application/json
+X-CSRF-TOKEN: {{csrfToken}}
+
+{
+  "name": "Random Restaurant",
+  "cnpj": "11222333000181",
+  "street": "Rua Altamiro Guimarães",
+  "number": "123",
+  "complement": "Sala 02",
+  "neighborhood": "Centro",
+  "city": "Tubarão",
+  "state": "SC",
+  "postalCode": "88701-300"
+}

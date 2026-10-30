@@ -50,6 +50,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapAuthEndpoints();
+app.MapRestaurantEndpoints();
 
 app.Run();
 

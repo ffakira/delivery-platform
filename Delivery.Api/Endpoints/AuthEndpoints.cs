@@ -1,7 +1,9 @@
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Delivery.Api.Endpoints.Security;
 using Delivery.Infrastructure.Identity;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Builder;
@@ -36,7 +38,9 @@ public static class AuthEndpoints
         return endpoints;
     }
 
-    private static IResult GetCsrfToken(HttpContext context, IAntiforgery antiforgery)
+    private static IResult GetCsrfToken(
+        HttpContext context,
+        IAntiforgery antiforgery)
     {
         var tokens = antiforgery.GetAndStoreTokens(context);
 
@@ -50,14 +54,17 @@ public static class AuthEndpoints
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager)
     {
-        if (!await IsAntiforgeryValid(context, antiforgery))
+        if (!await antiforgery.IsAntiforgeryValidAsync(context))
         {
-            return Results.BadRequest(new { message = "Invalid anti-forgery token." });
+            return Results.BadRequest(
+                new { message = "Invalid anti-forgery token." });
         }
 
-        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+        if (string.IsNullOrWhiteSpace(request.Email) ||
+            string.IsNullOrWhiteSpace(request.Password))
         {
-            return Results.BadRequest(new { message = "Email and password is required" });
+            return Results.BadRequest(
+                new { message = "Email and password are required." });
         }
 
         var user = await userManager.FindByEmailAsync(request.Email);
@@ -67,9 +74,11 @@ public static class AuthEndpoints
             return InvalidCredentials();
         }
 
-        var result =
-            await signInManager.PasswordSignInAsync(user, request.Password, isPersistent: false,
-                lockoutOnFailure: false);
+        var result = await signInManager.PasswordSignInAsync(
+            user,
+            request.Password,
+            isPersistent: false,
+            lockoutOnFailure: false);
 
         if (!result.Succeeded)
         {
@@ -79,47 +88,62 @@ public static class AuthEndpoints
         return Results.NoContent();
     }
 
-    private static async Task<IResult> Register(RegisterRequest request, HttpContext context, IAntiforgery antiforgery,
+    private static async Task<IResult> Register(
+        RegisterRequest request,
+        HttpContext context,
+        IAntiforgery antiforgery,
         UserManager<ApplicationUser> userManager)
     {
-        if (!await IsAntiforgeryValid(context, antiforgery))
+        if (!await antiforgery.IsAntiforgeryValidAsync(context))
         {
-            return Results.BadRequest(new { message = "Invalid anti-forgery token." });
+            return Results.BadRequest(
+                new { message = "Invalid anti-forgery token." });
         }
 
-        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+        if (string.IsNullOrWhiteSpace(request.Email) ||
+            string.IsNullOrWhiteSpace(request.Password))
         {
-            return Results.BadRequest(new { message = "Email and password is required" });
+            return Results.BadRequest(
+                new { message = "Email and password are required." });
         }
 
         var user = new ApplicationUser
         {
             UserName = request.Email,
-            Email = request.Email,
+            Email = request.Email
         };
 
-        var result = await userManager.CreateAsync(user, request.Password);
+        var result = await userManager.CreateAsync(
+            user,
+            request.Password);
 
         if (!result.Succeeded)
         {
             return Results.BadRequest(new
-                { message = "Registration failed.", errors = result.Errors.Select(error => error.Description) });
+            {
+                message = "Registration failed.",
+                errors = result.Errors.Select(error => error.Description)
+            });
         }
 
         return Results.Created(
-            "/api/auth/me", new
+            "/api/auth/me",
+            new
             {
                 id = user.Id,
                 email = user.Email
             });
     }
 
-    private static async Task<IResult> Logout(HttpContext context, IAntiforgery antiforgery,
+    private static async Task<IResult> Logout(
+        HttpContext context,
+        IAntiforgery antiforgery,
         SignInManager<ApplicationUser> signInManager)
     {
-        if (!await IsAntiforgeryValid(context, antiforgery))
+        if (!await antiforgery.IsAntiforgeryValidAsync(context))
         {
-            return Results.BadRequest(new { message = "Invalid anti-forgery token." });
+            return Results.BadRequest(
+                new { message = "Invalid anti-forgery token." });
         }
 
         await signInManager.SignOutAsync();
@@ -127,7 +151,9 @@ public static class AuthEndpoints
         return Results.NoContent();
     }
 
-    private static async Task<IResult> GetCurrentUser(UserManager<ApplicationUser> userManager, HttpContext context)
+    private static async Task<IResult> GetCurrentUser(
+        UserManager<ApplicationUser> userManager,
+        HttpContext context)
     {
         var user = await userManager.GetUserAsync(context.User);
 
@@ -135,37 +161,32 @@ public static class AuthEndpoints
         {
             return Results.Unauthorized();
         }
-        
+
         var roles = await userManager.GetRolesAsync(user);
 
         return Results.Ok(new CurrentUserResponse(
             user.Id,
-            user.Email, roles));
-    }
-
-    private static async Task<bool> IsAntiforgeryValid(HttpContext context, IAntiforgery antiforgery)
-    {
-        try
-        {
-            await antiforgery.ValidateRequestAsync(context);
-            return true;
-        }
-        catch (AntiforgeryValidationException)
-        {
-            return false;
-        }
+            user.Email,
+            roles));
     }
 
     private static IResult InvalidCredentials()
     {
         return Results.Json(
-            new { message = "Username or password is incorrect" },
+            new { message = "Username or password is incorrect." },
             statusCode: StatusCodes.Status401Unauthorized);
     }
 
-    private sealed record LoginRequest(string? Email, string? Password);
+    private sealed record LoginRequest(
+        string? Email,
+        string? Password);
 
-    private sealed record RegisterRequest(string? Email, string? Password);
+    private sealed record RegisterRequest(
+        string? Email,
+        string? Password);
 
-    private sealed record CurrentUserResponse(Guid Id, string? Email, IList<string> Roles);
+    private sealed record CurrentUserResponse(
+        Guid Id,
+        string? Email,
+        IList<string> Roles);
 }
