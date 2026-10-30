@@ -11,4 +11,9 @@ public interface IRestaurantRepository
     Task<IReadOnlyList<Restaurant>> ListByMemberAsync(
         Guid userId,
         CancellationToken cancellationToken = default);
+
+    Task<Restaurant?> FindByIdForMemberAsync(
+        Guid restaurantId,
+        Guid userId,
+        CancellationToken cancellationToken = default);
 }

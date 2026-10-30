@@ -36,4 +36,22 @@ public class EfRestaurantRepository(
             .OrderBy(restaurant => restaurant.Name)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<Restaurant?> FindByIdForMemberAsync(
+        Guid restaurantId,
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Restaurants
+            .Where(restaurant =>
+                restaurant.Id == restaurantId &&
+                restaurant.Memberships.Any(membership =>
+                    membership.UserId == userId &&
+                    membership.Status == MembershipStatus.Active))
+            .Include(restaurant =>
+                restaurant.Memberships.Where(membership =>
+                    membership.UserId == userId &&
+                    membership.Status == MembershipStatus.Active))
+            .SingleOrDefaultAsync(cancellationToken);
+    }
 }

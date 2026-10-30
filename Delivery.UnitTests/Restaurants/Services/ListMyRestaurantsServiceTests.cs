@@ -1,10 +1,9 @@
-
 using Delivery.Application.Restaurants.Queries;
-using Delivery.Application.Restaurants.Repositories;
 using Delivery.Application.Restaurants.Services;
 using Delivery.Domain.Restaurants.Entities;
 using Delivery.Domain.Restaurants.Enums;
 using Delivery.Domain.Restaurants.ValueObjects;
+using Delivery.UnitTests.Restaurants.Fakes;
 
 namespace Delivery.UnitTests.Restaurants.Services;
 
@@ -99,31 +98,5 @@ public sealed class ListMyRestaurantsServiceTests
                 "88010000"),
             ownerUserId,
             CreatedAtUtc);
-    }
-
-    private sealed class FakeRestaurantRepository(
-        params Restaurant[] restaurants) : IRestaurantRepository
-    {
-        public Task AddAsync(
-            Restaurant restaurant,
-            CancellationToken cancellationToken = default)
-        {
-            throw new NotSupportedException(
-                "Adding restaurants is not supported by this test repository.");
-        }
-
-        public Task<IReadOnlyList<Restaurant>> ListByMemberAsync(
-            Guid userId,
-            CancellationToken cancellationToken = default)
-        {
-            IReadOnlyList<Restaurant> result = restaurants
-                .Where(restaurant =>
-                    restaurant.Memberships.Any(membership =>
-                        membership.UserId == userId &&
-                        membership.Status == MembershipStatus.Active))
-                .ToArray();
-
-            return Task.FromResult(result);
-        }
     }
 }

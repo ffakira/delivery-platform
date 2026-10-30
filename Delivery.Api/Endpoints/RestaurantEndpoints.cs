@@ -26,6 +26,7 @@ public static class RestaurantEndpoints
 
         group.MapPost("/", CreateRestaurant);
         group.MapGet("/", ListMyRestaurants);
+        group.MapGet("/{restaurantId:guid}", GetRestaurantDetails);
 
         return endpoints;
     }
@@ -100,6 +101,33 @@ public static class RestaurantEndpoints
             cancellationToken);
         
         return Results.Ok(restaurants);
+    }
+
+    private static async Task<IResult> GetRestaurantDetails(
+        Guid restaurantId,
+        HttpContext context,
+        UserManager<ApplicationUser> userManager,
+        GetRestaurantDetailsService getRestaurantDetailsService,
+        CancellationToken cancellationToken)
+    {
+        var user = await userManager.GetUserAsync(context.User);
+
+        if (user is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var query = new GetRestaurantDetailsQuery(
+            restaurantId,
+            user.Id);
+        
+        var restaurant = await getRestaurantDetailsService.ExecuteAsync(
+            query,
+            cancellationToken);
+
+        return restaurant is null
+            ? Results.NotFound()
+            : Results.Ok(restaurant);
     }
 
     private sealed record CreateRestaurantRequest(

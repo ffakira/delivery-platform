@@ -36,6 +36,7 @@ builder.Services.AddHosting(builder.Configuration);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<CreateRestaurantService>();
 builder.Services.AddScoped<ListMyRestaurantsService>();
+builder.Services.AddScoped<GetRestaurantDetailsService>();
 
 var app = builder.Build();
 

@@ -1,7 +1,9 @@
+
 using Delivery.Application.Restaurants.Commands;
 using Delivery.Application.Restaurants.Repositories;
 using Delivery.Application.Restaurants.Services;
 using Delivery.Domain.Restaurants.Entities;
+using Delivery.UnitTests.Restaurants.Fakes;
 
 namespace Delivery.UnitTests.Restaurants.Services;
 
@@ -21,14 +23,18 @@ public sealed class CreateRestaurantServiceTests
             CreateValidCommand(),
             ownerUserId);
 
-        var restaurant = Assert.IsType<Restaurant>(repository.Restaurant);
+        var restaurant = Assert.Single(repository.Restaurants);
 
         Assert.Equal(restaurantId, restaurant.Id);
         Assert.Equal("Sample Restaurant", restaurant.Name);
         Assert.Equal("11222333000181", restaurant.Cnpj.Value);
         Assert.Equal(FixedTime.UtcDateTime, restaurant.CreatedAtUtc);
 
-        Assert.True(repository.AddWasCalled);
+        var membership = Assert.Single(restaurant.Memberships);
+
+        Assert.Equal(ownerUserId, membership.UserId);
+        Assert.Equal(Delivery.Domain.Restaurants.Enums.RestaurantRole.Owner, membership.Role);
+        Assert.Equal(Delivery.Domain.Restaurants.Enums.MembershipStatus.Active, membership.Status);
     }
 
     [Fact]
@@ -46,8 +52,7 @@ public sealed class CreateRestaurantServiceTests
 
         await Assert.ThrowsAsync<ArgumentException>(act);
 
-        Assert.Null(repository.Restaurant);
-        Assert.False(repository.AddWasCalled);
+        Assert.Empty(repository.Restaurants);
     }
 
     [Fact]
@@ -65,8 +70,7 @@ public sealed class CreateRestaurantServiceTests
 
         await Assert.ThrowsAsync<ArgumentException>(act);
 
-        Assert.Null(repository.Restaurant);
-        Assert.False(repository.AddWasCalled);
+        Assert.Empty(repository.Restaurants);
     }
 
     [Fact]
@@ -81,8 +85,7 @@ public sealed class CreateRestaurantServiceTests
 
         await Assert.ThrowsAsync<ArgumentException>(act);
 
-        Assert.Null(repository.Restaurant);
-        Assert.False(repository.AddWasCalled);
+        Assert.Empty(repository.Restaurants);
     }
 
     [Fact]
@@ -95,8 +98,7 @@ public sealed class CreateRestaurantServiceTests
 
         await Assert.ThrowsAsync<ArgumentNullException>(act);
 
-        Assert.Null(repository.Restaurant);
-        Assert.False(repository.AddWasCalled);
+        Assert.Empty(repository.Restaurants);
     }
 
     private static CreateRestaurantService CreateService(
@@ -119,30 +121,6 @@ public sealed class CreateRestaurantServiceTests
             City: "Tubarão",
             State: "sc",
             PostalCode: "88701-000");
-    }
-
-    private sealed class FakeRestaurantRepository : IRestaurantRepository
-    {
-        public Restaurant? Restaurant { get; private set; }
-
-        public bool AddWasCalled { get; private set; }
-
-        public Task AddAsync(
-            Restaurant restaurant,
-            CancellationToken cancellationToken = default)
-        {
-            AddWasCalled = true;
-            Restaurant = restaurant;
-
-            return Task.CompletedTask;
-        }
-
-        public Task<IReadOnlyList<Restaurant>> ListByMemberAsync(
-            Guid userId,
-            CancellationToken cancellationToken = default)
-        {
-            throw new NotImplementedException();
-        }
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset utcNow)
