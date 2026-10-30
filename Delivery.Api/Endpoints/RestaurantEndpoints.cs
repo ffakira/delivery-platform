@@ -1,3 +1,4 @@
+
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,14 +20,14 @@ public static class RestaurantEndpoints
         this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints
-            .MapGroup("api/restaraunts")
+            .MapGroup("/api/restaurants")
             .RequireAuthorization();
 
         group.MapPost("/", CreateRestaurant);
 
         return endpoints;
     }
-    
+
     private static async Task<IResult> CreateRestaurant(
         CreateRestaurantRequest request,
         HttpContext context,
@@ -38,9 +39,9 @@ public static class RestaurantEndpoints
         if (!await antiforgery.IsAntiforgeryValidAsync(context))
         {
             return Results.BadRequest(
-                new { message = "Invalid anti-forgery token. "});
+                new { message = "Invalid anti-forgery token." });
         }
-        
+
         var user = await userManager.GetUserAsync(context.User);
 
         if (user is null)
@@ -67,7 +68,7 @@ public static class RestaurantEndpoints
                 cancellationToken);
 
             return Results.Created(
-                $"/api/restaraunts/{restaurantId}",
+                $"/api/restaurants/{restaurantId}",
                 new { id = restaurantId });
         }
         catch (ArgumentException exception)

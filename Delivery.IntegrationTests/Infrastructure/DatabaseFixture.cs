@@ -19,19 +19,19 @@ public sealed class DatabaseFixture : IAsyncLifetime
 
     public HttpClient Client { get; private set; } = null!;
 
+    public IServiceProvider Services =>
+        _factory?.Services
+        ?? throw new InvalidOperationException(
+            "The database fixture has not been initialized.");
+
     public async Task InitializeAsync()
     {
         await _postgres.StartAsync();
 
-        _factory = new DeliveryApiFactory(_postgres.GetConnectionString());
+        _factory = new DeliveryApiFactory(
+            _postgres.GetConnectionString());
 
-        Client = _factory.CreateClient(
-            new WebApplicationFactoryClientOptions
-            {
-                BaseAddress = new Uri("https://localhost"),
-                AllowAutoRedirect = false
-            }
-        );
+        Client = CreateClient();
 
         await using var scope = _factory.Services.CreateAsyncScope();
 
@@ -39,6 +39,22 @@ public sealed class DatabaseFixture : IAsyncLifetime
             .GetRequiredService<ApplicationDbContext>();
 
         await dbContext.Database.MigrateAsync();
+    }
+
+    public HttpClient CreateClient()
+    {
+        if (_factory is null)
+        {
+            throw new InvalidOperationException(
+                "The database fixture has not been initialized.");
+        }
+
+        return _factory.CreateClient(
+            new WebApplicationFactoryClientOptions
+            {
+                BaseAddress = new Uri("https://localhost"),
+                AllowAutoRedirect = false
+            });
     }
 
     public async Task DisposeAsync()
