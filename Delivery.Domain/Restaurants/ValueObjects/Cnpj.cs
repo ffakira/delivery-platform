@@ -1,3 +1,4 @@
+
 namespace Delivery.Domain.Restaurants.ValueObjects;
 
 public sealed record Cnpj
@@ -37,7 +38,7 @@ public sealed record Cnpj
 
         for (var i = 0; i < 12; i++)
         {
-            if (!IsAsciiLetterOrDigit(normalized[i]))
+            if (!char.IsAsciiLetterOrDigit(normalized[i]))
             {
                 return false;
             }
@@ -45,6 +46,12 @@ public sealed record Cnpj
 
         if (!char.IsAsciiDigit(normalized[12]) ||
             !char.IsAsciiDigit(normalized[13]))
+        {
+            return false;
+        }
+
+        // Reject CNPJs with 12 identical base characters.
+        if (normalized.AsSpan(1, 11).IndexOfAnyExcept(normalized[0]) < 0)
         {
             return false;
         }
@@ -67,11 +74,6 @@ public sealed record Cnpj
             .Replace("/", string.Empty)
             .Replace("-", string.Empty)
             .ToUpperInvariant();
-    }
-
-    private static bool IsAsciiLetterOrDigit(char value)
-    {
-        return char.IsAsciiLetterOrDigit(value);
     }
 
     private static bool HasValidCheckDigits(string value)

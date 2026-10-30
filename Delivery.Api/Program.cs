@@ -1,6 +1,8 @@
+using System;
 using System.IO;
 using Delivery.Api.Endpoints;
 using Delivery.Api.Extensions;
+using Delivery.Application.Restaurants.Services;
 using Delivery.Infrastructure.Persistence;
 using DotNetEnv;
 using Microsoft.AspNetCore.Builder;
@@ -29,6 +31,10 @@ builder.Services.AddPersistence(builder.Configuration);
 builder.Services.AddApplicationIdentity();
 builder.Services.AddAuthorization();
 builder.Services.AddHosting(builder.Configuration);
+
+// application services
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<CreateRestaurantService>();
 
 var app = builder.Build();
 
