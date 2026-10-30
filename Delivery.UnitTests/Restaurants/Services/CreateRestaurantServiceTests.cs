@@ -106,6 +106,7 @@ public sealed class CreateRestaurantServiceTests
     {
         return new CreateRestaurantService(
             repository,
+            new FakeUnitOfWork(),
             new FixedTimeProvider(FixedTime));
     }
 

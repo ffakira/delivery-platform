@@ -2,9 +2,9 @@
 
 Plataforma de delivery desenvolvida com **C# e .NET 10**, estruturada para suportar múltiplos restaurantes, utilizadores e permissões específicas por restaurante.
 
-O projecto adopta uma arquitectura em camadas, com separação entre regras de negócio, casos de uso, infraestrutura e exposição HTTP.
+O projecto adopta uma arquitectura em camadas, com separação entre regras de negócio, casos de uso, infraestrutura e exposição HTTP. O domínio mantém-se independente dos detalhes de implementação da infraestrutura.
 
-> **Estado do projecto:** em desenvolvimento activo. A implementação actual inclui autenticação, gestão de restaurantes e memberships.
+> **Estado do projecto:** em desenvolvimento activo. A implementação actual inclui autenticação, gestão de restaurantes, memberships e persistência de convites para membros.
 
 ## Tecnologias
 
@@ -14,6 +14,7 @@ O projecto adopta uma arquitectura em camadas, com separação entre regras de n
 - **PostgreSQL 18**
 - **ASP.NET Core Identity**
 - **Docker Compose**
+- **Redis**
 - **xUnit**
 - **Testcontainers**
 
@@ -24,33 +25,24 @@ A solução está dividida em seis projectos:
 | Projecto | Responsabilidade |
 |---|---|
 | `Delivery.Domain` | Entidades, objectos de valor e regras de negócio |
-| `Delivery.Application` | Casos de uso, contratos e lógica de aplicação |
-| `Delivery.Infrastructure` | Persistência, Entity Framework Core e implementações dos repositórios |
+| `Delivery.Application` | Casos de uso, contratos e serviços de aplicação |
+| `Delivery.Infrastructure` | Persistência, Entity Framework Core e implementações dos contratos |
 | `Delivery.Api` | Endpoints HTTP, autenticação e composição da aplicação |
 | `Delivery.UnitTests` | Testes unitários das regras de domínio e casos de uso |
 | `Delivery.IntegrationTests` | Testes de integração da API e persistência |
 
-### Fluxo de dependências
+### Organização das dependências
+
+A arquitectura segue o princípio de inversão de dependências. A camada de aplicação define os contratos de que necessita, enquanto a infraestrutura fornece as respectivas implementações.
 
 ```mermaid
 flowchart TB
-    subgraph Presentation["Apresentação"]
-        API["Delivery.Api<br/>Endpoints HTTP<br/>Autenticação e autorização"]
-    end
-
-    subgraph ApplicationLayer["Aplicação"]
-        APP["Delivery.Application<br/>Casos de uso<br/>Contratos e serviços"]
-    end
-
-    subgraph DomainLayer["Domínio"]
-        DOMAIN["Delivery.Domain<br/>Entidades<br/>Value Objects<br/>Regras de negócio"]
-    end
-
-    subgraph InfrastructureLayer["Infraestrutura"]
-        INFRA["Delivery.Infrastructure<br/>Entity Framework Core<br/>Repositórios e persistência"]
-        DB[("PostgreSQL")]
-    end
-
+    API["Delivery.Api<br/>HTTP · Autenticação · Autorização"]
+    APP["Delivery.Application<br/>Casos de uso · Contratos"]
+    DOMAIN["Delivery.Domain<br/>Entidades · Value Objects · Regras"]
+    INFRA["Delivery.Infrastructure<br/>EF Core · Repositórios · Persistência"]
+    DB[("PostgreSQL")]
+    
     API --> APP
     API --> INFRA
     APP --> DOMAIN
@@ -58,20 +50,25 @@ flowchart TB
     INFRA --> DOMAIN
     INFRA --> DB
 
-    classDef presentation fill:#1e3a5f,color:#ffffff,stroke:#60a5fa,stroke-width:1.5px
-    classDef application fill:#164e63,color:#ffffff,stroke:#22d3ee,stroke-width:1.5px
-    classDef domain fill:#365314,color:#ffffff,stroke:#a3e635,stroke-width:1.5px
-    classDef infrastructure fill:#713f12,color:#ffffff,stroke:#fbbf24,stroke-width:1.5px
-    classDef database fill:#374151,color:#ffffff,stroke:#9ca3af,stroke-width:1.5px
-
-    class API presentation
-    class APP application
-    class DOMAIN domain
-    class INFRA infrastructure
-    class DB database
+    style DOMAIN fill:#365314,color:#fff,stroke:#a3e635
+    style APP fill:#164e63,color:#fff,stroke:#22d3ee
+    style INFRA fill:#713f12,color:#fff,stroke:#fbbf24
+    style API fill:#1e3a5f,color:#fff,stroke:#60a5fa
+    style DB fill:#374151,color:#fff,stroke:#9ca3af
 ```
 
-O domínio não depende de frameworks de infraestrutura. A camada de aplicação define os casos de uso e os contratos necessários, enquanto a infraestrutura fornece as respectivas implementações.
+O domínio não depende de frameworks de infraestrutura. A aplicação define os casos de uso e os contratos necessários à sua execução. A infraestrutura implementa esses contratos, enquanto a API é responsável pela exposição HTTP e pela composição das dependências.
+
+### Persistência e Unit of Work
+
+A persistência utiliza Entity Framework Core através de repositórios e de uma abstracção de Unit of Work.
+
+- Os repositórios são responsáveis pelo acesso e acompanhamento das entidades.
+- A aplicação controla quando as alterações devem ser persistidas.
+- A Unit of Work centraliza a chamada a `SaveChangesAsync`.
+- As alterações realizadas numa única operação de `SaveChangesAsync` são executadas dentro da transacção gerida pelo provider relacional do Entity Framework Core.
+
+Esta abordagem permite que um caso de uso altere várias entidades e persista as alterações numa única operação.
 
 ## Funcionalidades implementadas
 
@@ -95,6 +92,19 @@ O domínio não depende de frameworks de infraestrutura. A camada de aplicação
 - Estados de membership: `Invited`, `Active` e `Suspended`.
 
 Um utilizador pode estar associado a vários restaurantes. A autorização e o papel do utilizador são determinados individualmente para cada restaurante.
+
+### Convites para membros
+
+- Criação de convites associados a um restaurante.
+- Convites identificados por endereço de email.
+- Atribuição de papéis de `Manager` ou `Staff`.
+- Armazenamento de hash do token de convite.
+- Controlo de validade através de data de expiração.
+- Estados de convite: `Pending`, `Accepted`, `Revoked` e `Expired`.
+
+A entidade de convite faz parte do agregado `Restaurant`. A persistência e as regras de transição de estado estão implementadas no domínio.
+
+> Os casos de uso e endpoints para aceitação e revogação de convites ainda não estão implementados.
 
 ## Requisitos
 
@@ -273,9 +283,18 @@ DeliveryPlatform/
 │   ├── Extensions/
 │   └── Properties/
 ├── Delivery.Application/
+│   ├── Abstractions/
+│   │   └── Persistence/
 │   └── Restaurants/
+│       ├── Commands/
+│       ├── Queries/
+│       ├── Repositories/
+│       └── Services/
 ├── Delivery.Domain/
 │   └── Restaurants/
+│       ├── Entities/
+│       ├── Enums/
+│       └── ValueObjects/
 ├── Delivery.Infrastructure/
 │   ├── Identity/
 │   └── Persistence/
@@ -293,12 +312,14 @@ DeliveryPlatform/
 
 ## Desenvolvimento
 
-O projecto segue alguns princípios de engenharia:
+O projecto segue os seguintes princípios de engenharia:
 
 - Separação entre domínio, aplicação e infraestrutura.
+- Inversão de dependências.
 - Regras de negócio independentes de persistência.
 - Casos de uso explícitos.
 - Persistência através de Entity Framework Core.
+- Unit of Work para controlar a fronteira de persistência.
 - Testes unitários para validar regras e comportamentos.
 - Testes de integração para validar os fluxos reais da aplicação.
 - Autorização baseada na membership do utilizador em cada restaurante.

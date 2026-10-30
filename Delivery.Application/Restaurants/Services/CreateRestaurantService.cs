@@ -1,3 +1,4 @@
+using Delivery.Application.Abstractions.Persistence;
 using Delivery.Application.Restaurants.Commands;
 using Delivery.Application.Restaurants.Repositories;
 using Delivery.Domain.Restaurants.Entities;
@@ -7,6 +8,7 @@ namespace Delivery.Application.Restaurants.Services;
 
 public class CreateRestaurantService(
     IRestaurantRepository restaurantRepository,
+    IUnitOfWork unitOfWork,
     TimeProvider timeProvider)
 {
     public async Task<Guid> ExecuteAsync(
@@ -38,6 +40,8 @@ public class CreateRestaurantService(
             restaraunt,
             cancellationToken);
         
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
         return restaraunt.Id;
     }
 }

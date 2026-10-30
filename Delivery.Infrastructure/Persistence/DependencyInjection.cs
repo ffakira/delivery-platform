@@ -1,3 +1,4 @@
+using Delivery.Application.Abstractions.Persistence;
 using Delivery.Application.Restaurants.Repositories;
 using Delivery.Infrastructure.Persistence.Repositories.Restaurants;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +19,8 @@ public static class DependencyInjection
 
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(connectionString));
+
+        services.AddScoped<IUnitOfWork, EfUnitOfWork>();
 
         services.AddScoped<IRestaurantRepository, EfRestaurantRepository>();
 

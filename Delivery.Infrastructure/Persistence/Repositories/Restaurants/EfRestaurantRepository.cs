@@ -16,7 +16,8 @@ public class EfRestaurantRepository(
             restaurant,
             cancellationToken);
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await dbContext.Restaurants.AddAsync(
+            restaurant, cancellationToken);
     }
 
     public async Task<IReadOnlyList<Restaurant>> ListByMemberAsync(
