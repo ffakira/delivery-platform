@@ -22,7 +22,7 @@ public sealed class AcceptRestaurantInvitationTests(DatabaseFixture fixture)
         using var owner = await fixture.CreateAuthenticatedClientAsync();
         using var invitee = await fixture.CreateAuthenticatedClientAsync();
 
-        const string token = "valid-invitation-token";
+        var token = GenerateInvitationToken();
 
         var restaurantId = await SeedInvitationAsync(
             owner.UserId,
@@ -99,7 +99,7 @@ public sealed class AcceptRestaurantInvitationTests(DatabaseFixture fixture)
         using var owner = await fixture.CreateAuthenticatedClientAsync();
         using var invitee = await fixture.CreateAuthenticatedClientAsync();
 
-        const string token = "email-mismatch-invitation-token";
+        var token = GenerateInvitationToken();
 
         var restaurantId = await SeedInvitationAsync(
             owner.UserId,
@@ -182,6 +182,12 @@ public sealed class AcceptRestaurantInvitationTests(DatabaseFixture fixture)
         await dbContext.SaveChangesAsync();
 
         return restaurant.Id;
+    }
+
+    private static string GenerateInvitationToken()
+    {
+        return Convert.ToHexString(
+            RandomNumberGenerator.GetBytes(32));
     }
 
     private static string CreateValidCnpj()

@@ -15,4 +15,6 @@ public sealed class EmailOptions
     public string FromAddress { get; set; } = string.Empty;
     
     public string FromName { get; set; } = string.Empty;
+
+    public string ConfirmationUrl { get; set; } = string.Empty;
 }

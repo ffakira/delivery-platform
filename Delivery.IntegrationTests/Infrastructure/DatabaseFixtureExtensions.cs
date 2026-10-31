@@ -55,6 +55,42 @@ public static class DatabaseFixtureExtensions
                     $"Response: {await registrationResponse.Content.ReadAsStringAsync(cancellationToken)}");
             }
 
+            Guid userId;
+
+            await using (var scope = fixture.Services.CreateAsyncScope())
+            {
+                var userManager = scope.ServiceProvider
+                    .GetRequiredService<UserManager<ApplicationUser>>();
+
+                var user = await userManager.FindByEmailAsync(email);
+
+                if (user is null)
+                {
+                    throw new InvalidOperationException(
+                        "The registered user could not be found.");
+                }
+
+                // Confirm the email explicitly for authenticated test users.
+                var confirmationToken =
+                    await userManager.GenerateEmailConfirmationTokenAsync(user);
+
+                var confirmationResult = await userManager.ConfirmEmailAsync(
+                    user,
+                    confirmationToken);
+
+                if (!confirmationResult.Succeeded)
+                {
+                    throw new InvalidOperationException(
+                        "The test user's email could not be confirmed: " +
+                        string.Join(
+                            ", ",
+                            confirmationResult.Errors.Select(
+                                error => error.Description)));
+                }
+
+                userId = user.Id;
+            }
+
             var loginToken = await client.GetCsrfTokenAsync(
                 cancellationToken);
 
@@ -87,22 +123,9 @@ public static class DatabaseFixtureExtensions
                     $"Response: {await loginResponse.Content.ReadAsStringAsync(cancellationToken)}");
             }
 
-            await using var scope = fixture.Services.CreateAsyncScope();
-
-            var userManager = scope.ServiceProvider
-                .GetRequiredService<UserManager<ApplicationUser>>();
-
-            var user = await userManager.FindByEmailAsync(email);
-
-            if (user is null)
-            {
-                throw new InvalidOperationException(
-                    "The registered user could not be found.");
-            }
-
             return new AuthenticatedTestClient(
                 client,
-                user.Id,
+                userId,
                 email);
         }
         catch

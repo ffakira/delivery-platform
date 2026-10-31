@@ -13,5 +13,9 @@ public sealed class DeliveryApiFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable(
             "Cors__AllowedOrigins__0",
             "https://localhost");
+
+        Environment.SetEnvironmentVariable(
+            "Email__ConfirmationUrl",
+            "https://localhost/api/auth/confirm-email");
     }
 }

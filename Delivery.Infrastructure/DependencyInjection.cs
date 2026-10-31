@@ -39,6 +39,14 @@ public static class DependencyInjection
                     string.IsNullOrWhiteSpace(options.Username) ==
                     string.IsNullOrWhiteSpace(options.Password),
                 "Email username and password must either both be configured or both be empty.")
+            .Validate(
+                options => Uri.TryCreate(
+                    options.ConfirmationUrl,
+                    UriKind.Absolute,
+                    out var uri) &&
+                           (uri.Scheme == Uri.UriSchemeHttps ||
+                            uri.Scheme == Uri.UriSchemeHttp),
+                "A valid absolute email confirmation URL is required.")
             .ValidateOnStart();
 
         services.AddScoped<IEmailSender, SmtpEmailSender>();
