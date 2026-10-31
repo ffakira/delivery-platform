@@ -175,7 +175,7 @@ public static class AuthEndpoints
                 id = user.Id,
                 email = user.Email,
                 emailConfirmationRequired = true,
-                confirmationEmailSent = true
+                confirmationEmailQueued = true
             });
     }
 

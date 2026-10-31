@@ -2,6 +2,8 @@ using Delivery.Application.Abstractions.Email;
 using Delivery.Application.Abstractions.Security;
 using Delivery.Infrastructure.Email;
 using Delivery.Infrastructure.Persistence;
+using Delivery.Infrastructure.Persistence.Outbox;
+using Delivery.Infrastructure.Persistence.Outbox.Handlers;
 using Delivery.Infrastructure.Security;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -50,6 +52,15 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services.AddScoped<IEmailSender, SmtpEmailSender>();
+
+        services.AddScoped<
+            IOutboxMessageHandler,
+            EmailConfirmationMessageHandler>();
+
+        if (configuration.GetValue<bool>("Outbox:Enabled", true))
+        {
+            services.AddHostedService<OutboxBackgroundService>();
+        }
 
         return services;
     }

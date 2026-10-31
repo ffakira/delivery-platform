@@ -21,6 +21,10 @@ public sealed class DeliveryApiFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable(
             "Email__ConfirmationUrl",
             "https://localhost/api/auth/confirm-email");
+
+        Environment.SetEnvironmentVariable(
+            "Outbox__Enabled",
+            "false");
     }
 
     public RecordingEmailSender EmailSender { get; } = new();
