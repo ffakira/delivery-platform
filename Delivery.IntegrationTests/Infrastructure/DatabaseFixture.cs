@@ -68,4 +68,7 @@ public sealed class DatabaseFixture : IAsyncLifetime
 
         await _postgres.DisposeAsync();
     }
+
+    public RecordingEmailSender EmailSender =>
+        Services.GetRequiredService<RecordingEmailSender>();
 }

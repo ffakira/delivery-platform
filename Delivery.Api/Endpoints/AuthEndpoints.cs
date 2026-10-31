@@ -109,7 +109,11 @@ public static class AuthEndpoints
         RegisterRequest request,
         HttpContext context,
         IAntiforgery antiforgery,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        IEmailSender emailSender,
+        IOptions<EmailOptions> emailOptions,
+        ILogger<RegisterRequest> logger,
+        CancellationToken cancellationToken)
     {
         if (!await antiforgery.IsAntiforgeryValidAsync(context))
         {
@@ -143,12 +147,43 @@ public static class AuthEndpoints
             });
         }
 
+        try
+        {
+            await SendConfirmationEmailAsync(
+                user,
+                userManager,
+                emailSender,
+                emailOptions.Value,
+                cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                exception,
+                "Failed to send confirmation email to user {UserId}.",
+                user.Id);
+
+            // The account exists, but confirmation email delivery failed.
+            // The user can request another confirmation email.
+            return Results.Created(
+                "/api/auth/me",
+                new
+                {
+                    id = user.Id,
+                    email = user.Email,
+                    emailConfirmationRequired = true,
+                    confirmationEmailSent = false
+                });
+        }
+
         return Results.Created(
             "/api/auth/me",
             new
             {
                 id = user.Id,
-                email = user.Email
+                email = user.Email,
+                emailConfirmationRequired = true,
+                confirmationEmailSent = true
             });
     }
 
