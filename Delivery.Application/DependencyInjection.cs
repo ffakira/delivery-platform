@@ -12,6 +12,7 @@ public static class DependencyInjection
 
         services.AddScoped<CreateRestaurantService>();
         services.AddScoped<CreateRestaurantInvitationService>();
+        services.AddScoped<AcceptRestaurantInvitationService>();
         services.AddScoped<ListMyRestaurantsService>();
         services.AddScoped<GetRestaurantDetailsService>();
 
