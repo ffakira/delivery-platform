@@ -98,6 +98,7 @@ public sealed class OutboxBackgroundService(
         return messages.Count;
     }
 
+
     private async Task ProcessMessageAsync(
         ClaimedMessage claimedMessage,
         CancellationToken cancellationToken)
@@ -106,6 +107,9 @@ public sealed class OutboxBackgroundService(
 
         var dbContext = scope.ServiceProvider
             .GetRequiredService<ApplicationDbContext>();
+
+        var finalizer = scope.ServiceProvider
+            .GetRequiredService<EfOutboxMessageFinalizer>();
 
         var message = await dbContext.OutboxMessages
             .AsNoTracking()
@@ -153,21 +157,61 @@ public sealed class OutboxBackgroundService(
         }
         catch (Exception exception)
         {
-            await FailMessageAsync(
-                dbContext,
-                message,
+            var failedAtUtc = timeProvider
+                .GetUtcNow()
+                .UtcDateTime;
+
+            var updated = await finalizer.FailAsync(
+                message.Id,
                 claimedMessage.LockToken,
-                exception,
+                exception.Message,
+                failedAtUtc,
+                failedAtUtc.Add(GetRetryDelay(message.AttemptCount)),
+                MaximumAttempts,
                 cancellationToken);
+
+            if (!updated)
+            {
+                logger.LogWarning(
+                    "Outbox message {MessageId} failure could not be recorded because this worker no longer owns a valid lease.",
+                    message.Id);
+
+                return;
+            }
+
+            logger.LogError(
+                exception,
+                "Outbox message {MessageId} of type {MessageType} failed on attempt {AttemptCount}.",
+                message.Id,
+                message.Type,
+                message.AttemptCount);
 
             return;
         }
 
-        await CompleteMessageAsync(
-            dbContext,
-            message,
+        var processedAtUtc = timeProvider
+            .GetUtcNow()
+            .UtcDateTime;
+
+        var completed = await finalizer.CompleteAsync(
+            message.Id,
             claimedMessage.LockToken,
+            processedAtUtc,
             cancellationToken);
+
+        if (!completed)
+        {
+            logger.LogWarning(
+                "Outbox message {MessageId} could not be completed because this worker no longer owns a valid lease.",
+                message.Id);
+
+            return;
+        }
+
+        logger.LogInformation(
+            "Outbox message {MessageId} of type {MessageType} completed.",
+            message.Id,
+            message.Type);
     }
 
     private async Task CompleteMessageAsync(

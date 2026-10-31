@@ -27,6 +27,7 @@ public static class DependencyInjection
         services.AddScoped<IRestaurantRepository, EfRestaurantRepository>();
         services.AddScoped<IOutboxMessageWriter, EfOutboxMessageWriter>();
         services.AddScoped<EfOutboxMessageClaimer>();
+        services.AddScoped<EfOutboxMessageFinalizer>();
 
         return services;
     }
