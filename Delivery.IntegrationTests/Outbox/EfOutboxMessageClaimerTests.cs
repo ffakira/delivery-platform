@@ -1,4 +1,3 @@
-
 using Delivery.Infrastructure.Persistence;
 using Delivery.Infrastructure.Persistence.Outbox;
 using Delivery.IntegrationTests.Infrastructure;
@@ -190,7 +189,12 @@ public sealed class EfOutboxMessageClaimerTests(
             now.AddMinutes(-5),
             now.AddMinutes(5));
 
+        var lockToken = message.LockToken
+            ?? throw new InvalidOperationException(
+                "Claimed message must have a lock token.");
+
         message.Fail(
+            lockToken,
             "Temporary SMTP failure.",
             now,
             now.AddHours(1),

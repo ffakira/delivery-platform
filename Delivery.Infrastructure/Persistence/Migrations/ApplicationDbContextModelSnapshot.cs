@@ -231,6 +231,9 @@ namespace Delivery.Infrastructure.Persistence.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
+                    b.Property<Guid?>("LockToken")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("LockedUntilUtc")
                         .HasColumnType("timestamp with time zone");
 

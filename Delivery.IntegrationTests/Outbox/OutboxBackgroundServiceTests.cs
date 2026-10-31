@@ -17,10 +17,11 @@ public sealed class OutboxBackgroundServiceTests(
     [Fact]
     public async Task ExecuteAsync_WithValidEmailConfirmation_CompletesMessageAndSendsEmail()
     {
-        var userId = await CreateUserAsync();
+        var user = await CreateUserAsync();
+
         var messageId = await SeedMessageAsync(
             "identity.email-confirmation",
-            JsonSerializer.Serialize(new { userId }));
+            JsonSerializer.Serialize(new { userId = user.Id }));
 
         await RunUntilAsync(
             messageId,
@@ -33,9 +34,12 @@ public sealed class OutboxBackgroundServiceTests(
         Assert.Equal(1, persistedMessage.AttemptCount);
         Assert.NotNull(persistedMessage.ProcessedAtUtc);
         Assert.Null(persistedMessage.LastError);
+        Assert.Null(persistedMessage.LockToken);
+        Assert.Null(persistedMessage.LockedUntilUtc);
 
         var email = Assert.Single(fixture.EmailSender.Messages);
-        Assert.Equal("outbox-test@example.com", email.To);
+
+        Assert.Equal(user.Email, email.To);
         Assert.Contains("Confirm email address", email.HtmlBody);
     }
 
@@ -59,9 +63,12 @@ public sealed class OutboxBackgroundServiceTests(
         Assert.Equal(1, persistedMessage.AttemptCount);
         Assert.NotNull(persistedMessage.NextAttemptAtUtc);
         Assert.True(persistedMessage.NextAttemptAtUtc > DateTime.UtcNow);
+
         Assert.Contains(
             "No outbox handler is registered",
             persistedMessage.LastError);
+
+        Assert.Null(persistedMessage.LockToken);
         Assert.Null(persistedMessage.LockedUntilUtc);
     }
 
@@ -81,6 +88,7 @@ public sealed class OutboxBackgroundServiceTests(
         Assert.Equal(5, persistedMessage.AttemptCount);
         Assert.NotNull(persistedMessage.LastError);
         Assert.Null(persistedMessage.NextAttemptAtUtc);
+        Assert.Null(persistedMessage.LockToken);
         Assert.Null(persistedMessage.LockedUntilUtc);
     }
 
@@ -127,8 +135,10 @@ public sealed class OutboxBackgroundServiceTests(
         }
     }
 
-    private async Task<Guid> CreateUserAsync()
+    private async Task<TestUser> CreateUserAsync()
     {
+        var email = $"outbox-test-{Guid.NewGuid():N}@example.com";
+
         await using var scope = fixture.Services.CreateAsyncScope();
 
         var userManager = scope.ServiceProvider
@@ -137,8 +147,8 @@ public sealed class OutboxBackgroundServiceTests(
         var user = new ApplicationUser
         {
             Id = Guid.NewGuid(),
-            UserName = "outbox-test@example.com",
-            Email = "outbox-test@example.com"
+            UserName = email,
+            Email = email
         };
 
         var result = await userManager.CreateAsync(user);
@@ -149,7 +159,7 @@ public sealed class OutboxBackgroundServiceTests(
                 "; ",
                 result.Errors.Select(error => error.Description)));
 
-        return user.Id;
+        return new TestUser(user.Id, email);
     }
 
     private async Task<Guid> SeedMessageAsync(
@@ -196,7 +206,12 @@ public sealed class OutboxBackgroundServiceTests(
                 claimedAt,
                 claimedAt.AddMinutes(1));
 
+            var lockToken = message.LockToken
+                ?? throw new InvalidOperationException(
+                    "Claimed message must have a lock token.");
+
             message.Fail(
+                lockToken,
                 "Previous processing failure.",
                 claimedAt.AddSeconds(1),
                 claimedAt.AddMinutes(2),
@@ -231,4 +246,6 @@ public sealed class OutboxBackgroundServiceTests(
             .AsNoTracking()
             .SingleOrDefaultAsync(message => message.Id == messageId);
     }
+
+    private sealed record TestUser(Guid Id, string Email);
 }

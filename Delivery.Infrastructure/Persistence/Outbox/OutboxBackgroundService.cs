@@ -11,7 +11,7 @@ public sealed class OutboxBackgroundService(
     ILogger<OutboxBackgroundService> logger)
     : BackgroundService
 {
-    private const int BatchSize = 20;
+    private const int BatchSize = 1;
     private const int MaximumAttempts = 5;
 
     private static readonly TimeSpan ProcessingLease =
@@ -66,7 +66,6 @@ public sealed class OutboxBackgroundService(
     {
         IReadOnlyList<ClaimedMessage> messages;
 
-        // Claim messages and release the database scope before processing.
         await using (var scope = scopeFactory.CreateAsyncScope())
         {
             var claimer = scope.ServiceProvider
@@ -80,7 +79,10 @@ public sealed class OutboxBackgroundService(
             messages = claimedMessages
                 .Select(message => new ClaimedMessage(
                     message.Id,
-                    message.Type))
+                    message.Type,
+                    message.LockToken
+                        ?? throw new InvalidOperationException(
+                            "A claimed message must have a lock token.")))
                 .ToArray();
         }
 
@@ -106,13 +108,22 @@ public sealed class OutboxBackgroundService(
             .GetRequiredService<ApplicationDbContext>();
 
         var message = await dbContext.OutboxMessages
+            .AsNoTracking()
             .SingleOrDefaultAsync(
                 item => item.Id == claimedMessage.Id,
                 cancellationToken);
 
+        var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
+
         if (message is null ||
-            message.Status != OutboxMessageStatus.Processing)
+            message.Status != OutboxMessageStatus.Processing ||
+            message.LockToken != claimedMessage.LockToken ||
+            message.LockedUntilUtc <= nowUtc)
         {
+            logger.LogWarning(
+                "Outbox message {MessageId} is no longer owned by this worker. Skipping processing.",
+                claimedMessage.Id);
+
             return;
         }
 
@@ -142,41 +153,137 @@ public sealed class OutboxBackgroundService(
         }
         catch (Exception exception)
         {
-            var failedAtUtc = timeProvider
-                .GetUtcNow()
-                .UtcDateTime;
-
-            message.Fail(
-                exception.Message,
-                failedAtUtc,
-                failedAtUtc.Add(
-                    GetRetryDelay(message.AttemptCount)),
-                MaximumAttempts);
-
-            await dbContext.SaveChangesAsync(
-                cancellationToken);
-
-            logger.LogError(
+            await FailMessageAsync(
+                dbContext,
+                message,
+                claimedMessage.LockToken,
                 exception,
-                "Outbox message {MessageId} of type {MessageType} failed on attempt {AttemptCount}. Status: {Status}.",
-                message.Id,
-                message.Type,
-                message.AttemptCount,
-                message.Status);
+                cancellationToken);
 
             return;
         }
 
-        message.Complete(
-            timeProvider.GetUtcNow().UtcDateTime);
-
-        await dbContext.SaveChangesAsync(
+        await CompleteMessageAsync(
+            dbContext,
+            message,
+            claimedMessage.LockToken,
             cancellationToken);
+    }
+
+    private async Task CompleteMessageAsync(
+        ApplicationDbContext dbContext,
+        OutboxMessage message,
+        Guid lockToken,
+        CancellationToken cancellationToken)
+    {
+        var processedAtUtc = timeProvider
+            .GetUtcNow()
+            .UtcDateTime;
+
+        message.Complete(
+            lockToken,
+            processedAtUtc);
+
+        var affectedRows = await dbContext.OutboxMessages
+            .Where(item =>
+                item.Id == message.Id &&
+                item.Status == OutboxMessageStatus.Processing &&
+                item.LockToken == lockToken &&
+                item.LockedUntilUtc > processedAtUtc)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(
+                        item => item.Status,
+                        message.Status)
+                    .SetProperty(
+                        item => item.ProcessedAtUtc,
+                        message.ProcessedAtUtc)
+                    .SetProperty(
+                        item => item.LockedUntilUtc,
+                        message.LockedUntilUtc)
+                    .SetProperty(
+                        item => item.LockToken,
+                        message.LockToken)
+                    .SetProperty(
+                        item => item.LastError,
+                        message.LastError),
+                cancellationToken);
+
+        if (affectedRows == 0)
+        {
+            logger.LogWarning(
+                "Outbox message {MessageId} could not be completed because this worker no longer owns a valid lease.",
+                message.Id);
+
+            return;
+        }
 
         logger.LogInformation(
             "Outbox message {MessageId} of type {MessageType} completed.",
             message.Id,
             message.Type);
+    }
+
+    private async Task FailMessageAsync(
+        ApplicationDbContext dbContext,
+        OutboxMessage message,
+        Guid lockToken,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        var failedAtUtc = timeProvider
+            .GetUtcNow()
+            .UtcDateTime;
+
+        message.Fail(
+            lockToken,
+            exception.Message,
+            failedAtUtc,
+            failedAtUtc.Add(
+                GetRetryDelay(message.AttemptCount)),
+            MaximumAttempts);
+
+        var affectedRows = await dbContext.OutboxMessages
+            .Where(item =>
+                item.Id == message.Id &&
+                item.Status == OutboxMessageStatus.Processing &&
+                item.LockToken == lockToken &&
+                item.LockedUntilUtc > failedAtUtc)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(
+                        item => item.Status,
+                        message.Status)
+                    .SetProperty(
+                        item => item.NextAttemptAtUtc,
+                        message.NextAttemptAtUtc)
+                    .SetProperty(
+                        item => item.LockedUntilUtc,
+                        message.LockedUntilUtc)
+                    .SetProperty(
+                        item => item.LockToken,
+                        message.LockToken)
+                    .SetProperty(
+                        item => item.LastError,
+                        message.LastError),
+                cancellationToken);
+
+        if (affectedRows == 0)
+        {
+            logger.LogWarning(
+                "Outbox message {MessageId} failure could not be recorded because this worker no longer owns a valid lease.",
+                message.Id);
+
+            return;
+        }
+
+        logger.LogError(
+            exception,
+            "Outbox message {MessageId} of type {MessageType} failed on attempt {AttemptCount}. Status: {Status}.",
+            message.Id,
+            message.Type,
+            message.AttemptCount,
+            message.Status);
     }
 
     private static TimeSpan GetRetryDelay(int attemptCount)
@@ -191,5 +298,6 @@ public sealed class OutboxBackgroundService(
 
     private sealed record ClaimedMessage(
         Guid Id,
-        string Type);
+        string Type,
+        Guid LockToken);
 }

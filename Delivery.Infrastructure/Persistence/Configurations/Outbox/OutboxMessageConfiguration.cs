@@ -31,6 +31,8 @@ public sealed class OutboxMessageConfiguration
         builder.Property(om => om.CreatedAtUtc)
             .IsRequired();
 
+        builder.Property(om => om.LockToken);
+
         builder.Property(om => om.LastError)
             .HasMaxLength(2000);
 
