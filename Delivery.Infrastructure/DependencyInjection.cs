@@ -1,4 +1,6 @@
+using Delivery.Application.Abstractions.Email;
 using Delivery.Application.Abstractions.Security;
+using Delivery.Infrastructure.Email;
 using Delivery.Infrastructure.Persistence;
 using Delivery.Infrastructure.Security;
 using Microsoft.Extensions.Configuration;
@@ -16,7 +18,30 @@ public static class DependencyInjection
 
         services.AddSingleton<
             IInvitationTokenGenerator,
-        SecureInvitationTokenGenerator>();
+            SecureInvitationTokenGenerator>();
+
+        services.AddOptions<EmailOptions>()
+            .Bind(configuration.GetSection(EmailOptions.SectionName))
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.Host),
+                "Email host is required.")
+            .Validate(
+                options => options.Port is > 0 and <= 65535,
+                "Email port must be between 1 and 65535.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.FromAddress),
+                "Email sender address is required.")
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.FromName),
+                "Email sender name is required.")
+            .Validate(
+                options =>
+                    string.IsNullOrWhiteSpace(options.Username) ==
+                    string.IsNullOrWhiteSpace(options.Password),
+                "Email username and password must either both be configured or both be empty.")
+            .ValidateOnStart();
+
+        services.AddScoped<IEmailSender, SmtpEmailSender>();
 
         return services;
     }
