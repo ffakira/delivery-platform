@@ -14,6 +14,11 @@ public sealed class RestaurantTests
 
     private static readonly Guid StaffUserId =
         Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
+    
+    private static readonly Guid RecipientUserId =
+        Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+
+    private const string InvitationTokenHash = "accepted-invitation-token-hash";
 
     private static readonly DateTime CreatedAtUtc =
         new(2026, 10, 30, 12, 0, 0, DateTimeKind.Utc);
@@ -472,6 +477,166 @@ public sealed class RestaurantTests
                 CreatedAtUtc));
 
         Assert.Empty(restaurant.Invitations);
+    }
+
+    [Fact]
+    public void AcceptInvitation_WithValidInvitation_CreateActiveMembership()
+    {
+        var restaurant = CreateRestaurant();
+
+        var invitation = restaurant.InviteByEmail(
+            "employee@example.com",
+            RestaurantRole.Manager,
+            InvitationTokenHash,
+            OwnerUserId,
+            CreatedAtUtc,
+            InvitationExpiresAtUtc);
+
+        var acceptedAtUtc = CreatedAtUtc.AddHours(3);
+
+        var membership = restaurant.AcceptInvitation(
+            InvitationTokenHash,
+            RecipientUserId,
+            "employee@example.com",
+            acceptedAtUtc);
+        
+        Assert.Equal(restaurant.Id, membership.RestaurantId);
+        Assert.Equal(RecipientUserId, membership.UserId);
+        Assert.Equal(RestaurantRole.Manager, membership.Role);
+        Assert.Equal(MembershipStatus.Active, membership.Status);
+        Assert.Equal(acceptedAtUtc, membership.CreatedAtUtc);
+        Assert.Equal(acceptedAtUtc, membership.ActivatedAtUtc);
+        
+        Assert.Equal(InvitationStatus.Accepted, invitation.Status);
+        Assert.Equal(RecipientUserId, invitation.AcceptedByUserId);
+        Assert.Equal(acceptedAtUtc, invitation.AcceptedAtUtc);
+
+        Assert.Contains(membership, restaurant.Memberships);
+        Assert.Equal(2, restaurant.Memberships.Count);
+        Assert.Contains(membership, restaurant.Memberships);
+
+        Assert.Contains(
+            restaurant.Memberships,
+            item => item.UserId == OwnerUserId &&
+                    item.Role == RestaurantRole.Owner &&
+                    item.Status == MembershipStatus.Active);
+        Assert.Single(restaurant.Invitations);
+    }
+
+    [Fact]
+    public void AcceptInvitation_WithUnknownTokenHash_ThrowsInvalidOperationException()
+    {
+        var restaurant = CreateRestaurant();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            restaurant.AcceptInvitation(
+                "unknown-token-hash",
+                RecipientUserId,
+                "employee@example.com",
+                CreatedAtUtc.AddHours(1)));
+
+        Assert.Single(restaurant.Memberships);
+        Assert.Empty(restaurant.Invitations);
+    }
+
+    [Fact]
+    public void AcceptInvitation_WithDifferentEmail_LeavesInvitationPending()
+    {
+        var restaurant = CreateRestaurant();
+
+        var invitation = restaurant.InviteByEmail(
+            "employee@example.com",
+            RestaurantRole.Staff,
+            InvitationTokenHash,
+            OwnerUserId,
+            CreatedAtUtc,
+            InvitationExpiresAtUtc);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            restaurant.AcceptInvitation(
+                InvitationTokenHash,
+                RecipientUserId,
+                "another@example.com",
+                CreatedAtUtc.AddHours(1)));
+        
+        Assert.Equal(InvitationStatus.Pending, invitation.Status);
+        Assert.Null(invitation.AcceptedByUserId);
+        Assert.Null(invitation.AcceptedAtUtc);
+        Assert.Single(restaurant.Memberships);
+    }
+
+    [Theory]
+    [InlineData(MembershipStatus.Invited)]
+    [InlineData(MembershipStatus.Active)]
+    [InlineData(MembershipStatus.Suspended)]
+    public void AcceptInvitation_WithExistingMembership_RejectsAcceptance(
+        MembershipStatus existingStatus)
+    {
+        var restaurant = CreateRestaurant();
+
+        var invitation = restaurant.InviteByEmail(
+            "employee@example.com",
+            RestaurantRole.Staff,
+            InvitationTokenHash,
+            OwnerUserId,
+            CreatedAtUtc,
+            InvitationExpiresAtUtc);
+
+        var existingMembership = restaurant.InviteMember(
+            RecipientUserId,
+            RestaurantRole.Staff,
+            CreatedAtUtc.AddMinutes(1));
+
+        if (existingStatus is MembershipStatus.Active or MembershipStatus.Suspended)
+        {
+            existingMembership.Activate((CreatedAtUtc.AddMinutes(2)));
+        }
+
+        if (existingStatus == MembershipStatus.Suspended)
+        {
+            existingMembership.Suspend();
+        }
+
+        Assert.Throws<InvalidOperationException>(() =>
+            restaurant.AcceptInvitation(
+                InvitationTokenHash,
+                RecipientUserId,
+                "employee@example.com",
+                CreatedAtUtc.AddHours(1)));
+        
+        Assert.Equal(existingStatus, existingMembership.Status);
+        Assert.Equal(InvitationStatus.Pending, invitation.Status);
+        Assert.Null(invitation.AcceptedByUserId);
+        Assert.Equal(2, restaurant.Memberships.Count);
+    }
+
+    [Fact]
+    public void AcceptInvitation_WithAlreadyAcceptedInvitation_ThrowsInvalidOperationException()
+    {
+        var restaurant = CreateRestaurant();
+
+        restaurant.InviteByEmail(
+            "employee@example.com",
+            RestaurantRole.Staff,
+            InvitationTokenHash,
+            OwnerUserId,
+            CreatedAtUtc,
+            InvitationExpiresAtUtc);
+
+        restaurant.AcceptInvitation(
+            InvitationTokenHash,
+            RecipientUserId,
+            "employee@example.com",
+            CreatedAtUtc.AddHours(1));
+        
+        Assert.Throws<InvalidOperationException>(() =>
+            restaurant.AcceptInvitation(
+                InvitationTokenHash,
+                RecipientUserId,
+                "employee@example.com",
+                CreatedAtUtc.AddHours(2)));
+
+        Assert.Equal(2, restaurant.Memberships.Count);
     }
 
     private static Restaurant CreateRestaurant()

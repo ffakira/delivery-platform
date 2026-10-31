@@ -169,4 +169,49 @@ public sealed class Restaurant
 
         return invitation;
     }
+
+    public RestaurantMembership AcceptInvitation(
+        string tokenHash,
+        Guid userId,
+        string email,
+        DateTime acceptedAtUtc)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tokenHash);
+
+        if (userId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "User ID cannot be empty",
+                nameof(userId));
+        }
+
+        var invitation = _invitations.SingleOrDefault(invitation =>
+            string.Equals(
+                invitation.TokenHash,
+                tokenHash,
+                StringComparison.Ordinal));
+
+        if (invitation is null)
+        {
+            throw new InvalidOperationException(
+                "The invitation was not found.");
+        }
+
+        if (_memberships.Any(membership => membership.UserId == userId))
+        {
+            throw new InvalidOperationException(
+                "This user already has a membership in the restaurant.");
+        }
+        
+        invitation.Accept(userId, email, acceptedAtUtc);
+
+        var membership = RestaurantMembership.CreateFromAcceptedInvitation(
+            Id,
+            userId,
+            invitation.Role,
+            acceptedAtUtc);
+        
+        _memberships.Add(membership);
+        return membership;
+    }
 }

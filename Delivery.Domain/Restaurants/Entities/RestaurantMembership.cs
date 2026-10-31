@@ -101,6 +101,43 @@ public sealed class RestaurantMembership
             createdAtUtc);
     }
 
+    internal static RestaurantMembership CreateFromAcceptedInvitation(
+        Guid restaurantId,
+        Guid userId,
+        RestaurantRole role,
+        DateTime acceptedAtUtc)
+    {
+        if (restaurantId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Restaurant ID cannot be empty.",
+                nameof(restaurantId));
+        }
+
+        if (userId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "User ID cannot be empty.",
+                nameof(userId));
+        }
+
+        if (!Enum.IsDefined(role) || role == RestaurantRole.Owner)
+        {
+            throw new ArgumentException(
+                "Membership role must be Manager or Staff.",
+                nameof(role));
+        }
+
+        return new RestaurantMembership(
+            Guid.NewGuid(),
+            restaurantId,
+            userId,
+            role,
+            MembershipStatus.Active,
+            acceptedAtUtc,
+            acceptedAtUtc);
+    }
+
     public void Activate(DateTime activatedAtUtc)
     {
         if (Status != MembershipStatus.Invited)
