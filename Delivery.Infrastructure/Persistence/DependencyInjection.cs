@@ -26,6 +26,7 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<IRestaurantRepository, EfRestaurantRepository>();
         services.AddScoped<IOutboxMessageWriter, EfOutboxMessageWriter>();
+        services.AddScoped<EfOutboxMessageClaimer>();
 
         return services;
     }
