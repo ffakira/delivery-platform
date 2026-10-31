@@ -1,5 +1,6 @@
 using Delivery.Domain.Restaurants.Entities;
 using Delivery.Infrastructure.Identity;
+using Delivery.Infrastructure.Persistence.Outbox;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +15,9 @@ public sealed class ApplicationDbContext(
     
     public DbSet<RestaurantInvitation> RestaurantInvitations =>
         Set<RestaurantInvitation>();
+
+    public DbSet<OutboxMessage> OutboxMessages =>
+        Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

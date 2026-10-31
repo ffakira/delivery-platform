@@ -15,4 +15,17 @@ public sealed class FakeUnitOfWork : IUnitOfWork
 
         return Task.FromResult(1);
     }
+
+    public async Task<TResult> ExecuteInTransactionAsync<TResult>(
+        Func<CancellationToken, Task<TResult>> operation,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        var result = await operation(cancellationToken);
+        
+        await SaveChangesAsync(cancellationToken);
+
+        return result;
+    }
 }

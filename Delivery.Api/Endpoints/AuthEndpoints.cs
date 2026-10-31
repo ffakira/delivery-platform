@@ -1,4 +1,3 @@
-
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,6 +6,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Delivery.Api.Endpoints.Security;
 using Delivery.Application.Abstractions.Email;
+using Delivery.Application.Abstractions.Outbox;
+using Delivery.Application.Abstractions.Persistence;
 using Delivery.Infrastructure.Email;
 using Delivery.Infrastructure.Identity;
 using Microsoft.AspNetCore.Antiforgery;
@@ -105,14 +106,17 @@ public static class AuthEndpoints
         return Results.NoContent();
     }
 
+    private const string EmailConfirmationMessageType =
+        "identity.email-confirmation";
+
     private static async Task<IResult> Register(
         RegisterRequest request,
         HttpContext context,
         IAntiforgery antiforgery,
         UserManager<ApplicationUser> userManager,
-        IEmailSender emailSender,
-        IOptions<EmailOptions> emailOptions,
-        ILogger<RegisterRequest> logger,
+        IOutboxMessageWriter outboxMessageWriter,
+        IUnitOfWork unitOfWork,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         if (!await antiforgery.IsAntiforgeryValidAsync(context))
@@ -134,9 +138,26 @@ public static class AuthEndpoints
             Email = request.Email
         };
 
-        var result = await userManager.CreateAsync(
-            user,
-            request.Password);
+        var result = await unitOfWork.ExecuteInTransactionAsync(async transactionCancellationToken =>
+        {
+            var identityResult = await userManager.CreateAsync(
+                user,
+                request.Password);
+
+            if (!identityResult.Succeeded)
+            {
+                return identityResult;
+            }
+
+            await outboxMessageWriter.EnqueueAsync(
+                EmailConfirmationMessageType,
+                new { userId = user.Id },
+                timeProvider.GetUtcNow().UtcDateTime,
+                transactionCancellationToken);
+
+            return identityResult;
+        },
+            cancellationToken);
 
         if (!result.Succeeded)
         {
@@ -145,35 +166,6 @@ public static class AuthEndpoints
                 message = "Registration failed.",
                 errors = result.Errors.Select(error => error.Description)
             });
-        }
-
-        try
-        {
-            await SendConfirmationEmailAsync(
-                user,
-                userManager,
-                emailSender,
-                emailOptions.Value,
-                cancellationToken);
-        }
-        catch (Exception exception)
-        {
-            logger.LogError(
-                exception,
-                "Failed to send confirmation email to user {UserId}.",
-                user.Id);
-
-            // The account exists, but confirmation email delivery failed.
-            // The user can request another confirmation email.
-            return Results.Created(
-                "/api/auth/me",
-                new
-                {
-                    id = user.Id,
-                    email = user.Email,
-                    emailConfirmationRequired = true,
-                    confirmationEmailSent = false
-                });
         }
 
         return Results.Created(

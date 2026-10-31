@@ -1,10 +1,15 @@
+
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Delivery.Infrastructure.Identity;
+using Delivery.Infrastructure.Persistence;
+using Delivery.Infrastructure.Persistence.Outbox;
 using Delivery.IntegrationTests.Infrastructure;
-using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Delivery.IntegrationTests.Auth;
@@ -16,7 +21,7 @@ public sealed class RegistrationEmailConfirmationTests(
     private const string Password = "StrongPassword123!";
 
     [Fact]
-    public async Task Register_WithValidDetails_SendsConfirmationEmail()
+    public async Task Register_WithValidDetails_PersistsPendingOutboxMessage()
     {
         fixture.EmailSender.Clear();
 
@@ -28,37 +33,24 @@ public sealed class RegistrationEmailConfirmationTests(
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
-        var message = Assert.Single(fixture.EmailSender.Messages);
+        var user = await FindUserAsync(email);
 
-        Assert.Equal(email, message.To);
-        Assert.Equal(
-            "Confirm your Delivery Platform account",
-            message.Subject);
+        Assert.NotNull(user);
+        Assert.False(user.EmailConfirmed);
 
-        Assert.Contains("Welcome to Delivery Platform!", message.TextBody);
-        Assert.NotNull(message.HtmlBody);
-        Assert.Contains("Confirm email address", message.HtmlBody);
+        var message = await FindOutboxMessageAsync(user.Id);
 
-        var confirmationUrl = ExtractConfirmationUrl(message.TextBody);
+        Assert.NotNull(message);
+        Assert.Equal(OutboxMessageStatus.Pending, message.Status);
+        Assert.Equal(0, message.AttemptCount);
 
-        Assert.Equal(
-            "/api/auth/confirm-email",
-            confirmationUrl.AbsolutePath);
-
-        Assert.True(
-            QueryHelpers.ParseQuery(confirmationUrl.Query)
-                .ContainsKey("userId"));
-
-        Assert.True(
-            QueryHelpers.ParseQuery(confirmationUrl.Query)
-                .ContainsKey("token"));
+        // Registration must not send the email synchronously.
+        Assert.Empty(fixture.EmailSender.Messages);
     }
 
     [Fact]
     public async Task ConfirmationLink_GetRequest_DoesNotConfirmEmail()
     {
-        fixture.EmailSender.Clear();
-
         using var client = fixture.CreateClient();
 
         var email = CreateUniqueEmail();
@@ -71,8 +63,7 @@ public sealed class RegistrationEmailConfirmationTests(
             HttpStatusCode.Created,
             registrationResponse.StatusCode);
 
-        var message = Assert.Single(fixture.EmailSender.Messages);
-        var confirmationUrl = ExtractConfirmationUrl(message.TextBody);
+        var confirmationUrl = await CreateConfirmationUrlAsync(email);
 
         using var response = await client.GetAsync(confirmationUrl);
 
@@ -91,8 +82,6 @@ public sealed class RegistrationEmailConfirmationTests(
     [Fact]
     public async Task ConfirmEmail_WithValidToken_ConfirmsUserEmail()
     {
-        fixture.EmailSender.Clear();
-
         using var client = fixture.CreateClient();
 
         var email = CreateUniqueEmail();
@@ -105,8 +94,7 @@ public sealed class RegistrationEmailConfirmationTests(
             HttpStatusCode.Created,
             registrationResponse.StatusCode);
 
-        var message = Assert.Single(fixture.EmailSender.Messages);
-        var confirmationUrl = ExtractConfirmationUrl(message.TextBody);
+        var confirmationUrl = await CreateConfirmationUrlAsync(email);
 
         using var response = await SubmitConfirmationAsync(
             client,
@@ -123,8 +111,6 @@ public sealed class RegistrationEmailConfirmationTests(
     [Fact]
     public async Task ConfirmEmail_WithInvalidToken_ReturnsBadRequest()
     {
-        fixture.EmailSender.Clear();
-
         using var client = fixture.CreateClient();
 
         var email = CreateUniqueEmail();
@@ -137,8 +123,7 @@ public sealed class RegistrationEmailConfirmationTests(
             HttpStatusCode.Created,
             registrationResponse.StatusCode);
 
-        var message = Assert.Single(fixture.EmailSender.Messages);
-        var confirmationUrl = ExtractConfirmationUrl(message.TextBody);
+        var confirmationUrl = await CreateConfirmationUrlAsync(email);
 
         var query = QueryHelpers.ParseQuery(confirmationUrl.Query);
 
@@ -164,7 +149,7 @@ public sealed class RegistrationEmailConfirmationTests(
     }
 
     [Fact]
-    public async Task Register_WhenEmailDeliveryFails_StillCreatesUser()
+    public async Task Register_WhenEmailDeliveryIsUnavailable_StillQueuesConfirmationMessage()
     {
         fixture.EmailSender.Clear();
         fixture.EmailSender.ShouldFail = true;
@@ -183,6 +168,14 @@ public sealed class RegistrationEmailConfirmationTests(
 
             Assert.NotNull(user);
             Assert.False(user.EmailConfirmed);
+
+            var message = await FindOutboxMessageAsync(user.Id);
+
+            Assert.NotNull(message);
+            Assert.Equal(OutboxMessageStatus.Pending, message.Status);
+
+            // The registration request does not attempt SMTP delivery.
+            Assert.Empty(fixture.EmailSender.Messages);
         }
         finally
         {
@@ -240,18 +233,56 @@ public sealed class RegistrationEmailConfirmationTests(
         return await userManager.FindByEmailAsync(email);
     }
 
-    private static Uri ExtractConfirmationUrl(string textBody)
+    private async Task<OutboxMessage?> FindOutboxMessageAsync(Guid userId)
     {
-        var url = textBody
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .Select(line => line.Trim())
-            .FirstOrDefault(line =>
-                Uri.TryCreate(line, UriKind.Absolute, out _));
+        await using var scope = fixture.Services.CreateAsyncScope();
 
-        return Uri.TryCreate(url, UriKind.Absolute, out var result)
-            ? result
-            : throw new InvalidOperationException(
-                "The confirmation email did not contain a valid URL.");
+        var dbContext = scope.ServiceProvider
+            .GetRequiredService<ApplicationDbContext>();
+
+        var messages = await dbContext.OutboxMessages
+            .AsNoTracking()
+            .ToListAsync();
+
+        return messages.SingleOrDefault(message =>
+        {
+            using var document = JsonDocument.Parse(message.Payload);
+
+            return document.RootElement.TryGetProperty(
+                "userId",
+                out var property)
+                && property.GetGuid() == userId;
+        });
+    }
+
+    private async Task<Uri> CreateConfirmationUrlAsync(string email)
+    {
+        await using var scope = fixture.Services.CreateAsyncScope();
+
+        var userManager = scope.ServiceProvider
+            .GetRequiredService<UserManager<ApplicationUser>>();
+
+        var user = await userManager.FindByEmailAsync(email);
+
+        Assert.NotNull(user);
+
+        var token = await userManager.GenerateEmailConfirmationTokenAsync(
+            user);
+
+        var encodedToken = WebEncoders.Base64UrlEncode(
+            Encoding.UTF8.GetBytes(token));
+
+        var query = QueryHelpers.AddQueryString(
+            "/api/auth/confirm-email",
+            new Dictionary<string, string?>
+            {
+                ["userId"] = user.Id.ToString(),
+                ["token"] = encodedToken
+            });
+
+        return new Uri(
+            fixture.CreateClient().BaseAddress!,
+            query);
     }
 
     private static string CreateUniqueEmail()

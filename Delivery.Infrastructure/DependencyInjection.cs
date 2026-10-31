@@ -44,8 +44,8 @@ public static class DependencyInjection
                     options.ConfirmationUrl,
                     UriKind.Absolute,
                     out var uri) &&
-                           (uri.Scheme == Uri.UriSchemeHttps ||
-                            uri.Scheme == Uri.UriSchemeHttp),
+                    (uri.Scheme == Uri.UriSchemeHttps ||
+                     uri.Scheme == Uri.UriSchemeHttp),
                 "A valid absolute email confirmation URL is required.")
             .ValidateOnStart();
 
